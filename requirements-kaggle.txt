@@ -1,0 +1,4 @@
+# Keep Kaggle's preinstalled CUDA-enabled torch. Do not pip-install CPU torch.
+transformers==4.57.1
+huggingface-hub==0.35.3
+safetensors==0.6.2

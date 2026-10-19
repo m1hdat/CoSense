@@ -1,0 +1,15 @@
+# License/redistribution rights have not been verified.
+/data/
+/reports/
+/results/
+/checkpoints/
+/.runtime/
+/.venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+.cache/
+# Local Kaggle data bundles and verification outputs contain ignored source data.
+/dist/kaggle/
