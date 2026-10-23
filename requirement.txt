@@ -1,0 +1,6 @@
+# Local web, result analysis and tests. Training runs inside Kaggle notebooks.
+numpy>=1.26,<3
+pandas>=2.2,<4
+scipy>=1.13,<2
+streamlit>=1.40,<2
+pytest>=8,<10

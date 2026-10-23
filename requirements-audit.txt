@@ -1,2 +1,0 @@
-# Only plotting needs an external dependency. Core scripts use Python stdlib.
-matplotlib==3.11.2

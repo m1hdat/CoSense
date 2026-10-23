@@ -1,38 +1,45 @@
-# SemEval 2027 Task 5
+# CoSense — nghiên cứu và dự thi SemEval-2027 Task 5
 
-CoSense: audit **EN-NN/EN-PV tiếng Anh**, split và B0 cho **EN-NN**. B1/B2 chưa huấn luyện; các neural training run sẽ chạy Kaggle GPU.
+Model dự đoán một cụm từ còn giữ nghĩa của các thành phần đến mức nào trong một câu. B1 chỉ đọc cụm từ; B2 đọc thêm context. Phạm vi hiện tại: English NN và PV, train riêng trên Kaggle.
 
-- [Báo cáo dữ liệu và kết quả đã chạy](docs/DATA_REPORT.md)
-- [Protocol split/model/evaluation](docs/RESEARCH_PROTOCOL.md)
-- [Roadmap project](docs/PROJECT_ROADMAP.md)
-- [Roadmap nghiên cứu](docs/RESEARCH_ROADMAP.md)
-- [Hướng dẫn Kaggle chi tiết: upload Dataset, prepare, smoke và train](docs/KAGGLE_EN_NN_GUIDE.md)
-- [Notebook Kaggle EN-NN tự chứa code](notebooks/kaggle_en_nn.ipynb)
+**Bắt đầu ở [lộ trình dự án](docs/README.md).** Trang này cho biết đã làm gì, cần chạy gì tiếp và khi nào đủ để viết paper/nộp bài.
 
-Đã có notebook/code chuẩn bị EN-NN và tùy chọn fine-tune B1/B2; mặc định chỉ `prepare`, chưa chạy Kaggle GPU.
-Tạo lại notebook và gói Dataset local (không upload, không train):
+| Khi bạn cần… | Mở |
+|---|---|
+| Hiểu tổng thể và chọn việc tiếp theo | [Lộ trình](docs/README.md) |
+| Hiểu điểm gold, công thức và lý do chọn metric | [Metrics](docs/METRICS.md) |
+| Train Kaggle, mở web, giữ checkpoint, chuẩn bị submission | [Cách chạy và nộp bài](docs/RUN_GUIDE.md) |
 
-```powershell
-python scripts/build_kaggle_notebook.py
-python scripts/package_kaggle_en_nn.py
-```
+## Mở web local
 
-Gói được tạo tại `dist/kaggle/cosense-en-nn-data.zip`, bị Git ignore. Kiểm tra quyền sử dụng dữ liệu trước khi upload lên Kaggle.
-
-Từ repository root, dùng Python ≥3.11. Core scripts dùng thư viện chuẩn; Matplotlib chỉ cần để vẽ PNG:
+PowerShell tại thư mục repo. Cài lần đầu:
 
 ```powershell
-python -m pip install -r requirements-audit.txt
-python scripts/audit_data.py
-python scripts/create_splits.py
-python scripts/validate_splits.py
-python scripts/run_mean_baseline.py
-python scripts/build_data_report.py
-python -m unittest discover -s tests -v
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirement.txt
 ```
 
-Nếu dùng dependency cài riêng trong `.runtime/`, dùng cùng phiên bản Python (hiện Python 3.11). Core audit có thể chạy với `--no-figures`; báo cáo có hình cần chạy audit đầy đủ. Ưu tiên môi trường riêng thay vì sửa Python base.
+Mỗi lần dùng:
 
-Nguồn đọc tường minh ở `configs/data_protocol.json`; trial đã gộp theo người dùng. Không nạp trial thêm hoặc sửa TSV. Split lưu source/config/file hash; B0 chỉ xuất validation, chưa có metric final. Đổi source/config phải audit và kiểm tra split lại, không tự đổi split giữa fine-tune runs.
+```powershell
+.\.venv\Scripts\python.exe -m streamlit run app/streamlit_app.py
+```
 
-`data/`, `reports/`, `results/`, checkpoint và runtime bị ignore vì quyền phân phối chưa xác minh. Chưa commit/upload dữ liệu nguồn hoặc dẫn xuất. Metric và template chính thức chưa xác minh; protocol phân biệt metric nội bộ với leaderboard.
+Mở http://localhost:8501. Web hiện xem dữ liệu và results ZIP; chưa dự đoán câu mới.
+
+## Repo gồm gì?
+
+```text
+notebooks/          Sửa B1/B2 trực tiếp, chạy trên Kaggle
+app/ + src/         Web và logic đọc/so sánh kết quả
+data/               Dữ liệu, split cố định, data ZIP — riêng tư
+results/            Results tải từ Kaggle, baseline, phân tích — riêng tư
+docs/               Ba trang hướng dẫn; audit local nằm trong audit/
+literature-review/  Research notes và tài liệu paper
+tests/              Kiểm tra logic local và notebook syntax
+requirement.txt     Dependencies local; pyproject đọc cùng danh sách
+```
+
+Không có bước build notebook hoặc train local. Đổi logic chung thì cập nhật cả B1 và B2. Kiểm tra local bằng `.\.venv\Scripts\python.exe -m pytest -q`.
+
+Dữ liệu, results, audit và archive được Git bỏ qua. Các bản trước khi dọn nằm trong `archive/`; docs trước lần viết lại này được lưu ở `archive/docs-before-rewrite-20261023.zip`.

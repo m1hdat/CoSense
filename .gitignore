@@ -11,5 +11,13 @@ __pycache__/
 .env.*
 !.env.example
 .cache/
-# Local Kaggle data bundles and verification outputs contain ignored source data.
-/dist/kaggle/
+*.egg-info/
+.pytest_cache/
+
+/archive/
+
+# Audit exports include source contexts and local data details.
+/docs/audit/
+
+# Keep reference PDFs local; research notes link to the official papers.
+/literature-review/*.pdf
