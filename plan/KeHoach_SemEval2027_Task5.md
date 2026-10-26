@@ -72,7 +72,7 @@ Checkout hiện tại không có `data/`, `results/`, `.venv/` (bị `.gitignore
 
 Ai làm khác quy ước thì phải báo cả nhóm trước.
 
-**Lịch họp và hạn nộp.** Mỗi tuần chạy từ thứ Tư đến thứ Ba. Hạn của việc trong tuần là 20:00 thứ Ba. Họp 45 phút lúc 21:00 thứ Ba: mỗi người 5 phút nói kết quả và vướng mắc, Khang ghi biên bản vào `plan/meetings.md`.
+**Lịch họp và hạn nộp.** Mỗi tuần chạy từ thứ Tư đến thứ Ba. Hạn của việc trong tuần là 20:00 thứ Ba. Họp 45 phút lúc 21:00 thứ Ba: mỗi người 5 phút nói kết quả và vướng mắc, Khang ghi biên bản vào `plan/meetings.md`. Ngoại lệ tuần 2: hạn 20:00 Chủ nhật 01/11, họp 21:00 Thứ Hai 02/11.
 
 **Repo và thư mục.** Repo `m1hdat/CoSense`. Mọi thay đổi vào `main` qua pull request có ít nhất một người khác review. Cấu trúc:
 
@@ -203,7 +203,9 @@ Cuối tuần này cả nhóm đã đăng ký cuộc thi, có dữ liệu, có m
 - [ ] Danh sách bẫy có ít nhất 4 loại, mỗi loại 2 ví dụ
 - [ ] Đã trình bày 5 phút trong buổi họp
 
-## Tuần 2 (21/10–27/10): Dữ liệu, scorer, split, alignment
+## Tuần 2 (26/10–01/11): Dữ liệu, scorer, split, alignment
+
+**Hạn việc 20:00 Chủ nhật 01/11, họp 21:00 Thứ Hai 02/11.** Tuần 2 kéo dài hơn một tuần quy ước nên chồng với tuần 3; thứ tự việc và các hạn nhỏ nằm ở `plan/week2.md`.
 
 Cuối tuần này có bốn công cụ dùng chung đã được kiểm tra: bộ đọc dữ liệu, scorer nội bộ, split cố định, và hàm tìm cụm từ trong câu. **Trạng thái 24/10: cả bốn đã có trong `src/compartment/`; còn phần đo đạc và báo cáo.**
 
