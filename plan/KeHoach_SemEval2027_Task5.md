@@ -1,6 +1,16 @@
 # Kế hoạch nhóm SemEval-2027 Task 5 (ComPartMent)
 
-Bản cập nhật 24/10/2026 · Gốc: `KeHoach_SemEval2027_Task5.docx` (14/10/2026, @Khang Huân) · Đã sửa cho khớp repo `CoSense` ở commit `90061d4`
+Bản cập nhật 02/11/2026 (đầu tuần 3; bản trước 24/10) · Gốc: `KeHoach_SemEval2027_Task5.docx` (14/10/2026, @Khang Huân) · Đã sửa cho khớp repo `CoSense` ở commit `90061d4`
+
+## Cập nhật 02/11/2026 (đọc trước)
+
+Căn cứ: `origin/main` (commit mới nhất 23/10, `90061d4`) và `origin/plans` (26/10), fetch ngày 02/11. Việc nằm ngoài Git (EDA và báo cáo ở `results/analysis/`, Google Sheet, Codabench, Drive) không kiểm được; "chưa thấy bằng chứng" không có nghĩa chưa làm. Họp tối 02/11 xác nhận từng mục.
+
+- **Tuần 2 chưa đóng được trên Git.** Trên `main` chưa có `tests/test_scorer.py`, `tests/test_alignment.py`, chưa có field `mae` trong `evaluate`, và origin chưa có nhánh nào của Cương, Phát (chỉ có `main` và `plans`) và chưa thấy dấu hiệu PR nào (merge commit hay nhánh). Danh sách PR trên GitHub chưa kiểm được (máy này không có `gh`; PR từ fork không hiện thành nhánh): Khang mở trang Pull requests trên GitHub xác nhận trước họp. Phần việc còn thiếu dồn sang tuần 3.
+- **G1 đề xuất lùi từ 03/11 sang 10/11** (chốt ở họp 02/11). Chưa đủ bốn pilot (PV B1/B2 chưa chạy, exporter mới chưa xác minh trên saved version GPU), `task_facts.md` chưa có. G2 24/11 và các mốc sau giữ nguyên; cách hấp thụ một tuần trượt ở mục "Lộ trình và mốc".
+- **Tuần 3 chạy 02/11–10/11 và đổi trọng tâm sang train.** Dữ liệu, split, alignment, metrics đã dùng được, nên mỗi người tự train một hướng fine-tune trên Kaggle của mình, trả lời đúng một câu hỏi và báo số: Đạt baseline PV và nhiễu seed, Cương hiệu chỉnh độ lệch đầu ra, Khang B3 (thêm vector câu), Phát đổi backbone sang RoBERTa. Hướng E0/E1 và LLM tạm dừng. Chi tiết ở `plan/week3.md`; việc tồn từ tuần 1–2 dồn vào mục 8 của file đó.
+- **Rủi ro mới** (bảng cuối tài liệu): G1 trượt, một người (Đạt) giữ cả code trên `main` lẫn toàn bộ việc chạy GPU, quy trình PR chưa thấy chạy, plan chưa nằm trên `main`.
+- **Không merge nhánh `plans` vào `main`.** Commit `a0ca0ba` (26/10) xóa 18 file code để nhánh chỉ còn plan; merge nguyên nhánh sẽ xóa code trên `main`. Muốn đưa plan lên `main`, mở PR chỉ thêm thư mục `plan/` (nhánh `khang/plan` đúng là `main` + `plan/`).
 
 ## Đã đổi gì so với bản Word (đọc trước)
 
@@ -41,7 +51,7 @@ Mỗi mốc kiểm tra trong buổi họp thứ Ba cuối giai đoạn. Mốc n�
 
 | Giai đoạn | Tuần · ngày | Nội dung | Mốc |
 |---|---|---|---|
-| Khởi động và nền tảng | 1–3 · 14/10–03/11 | Luật thi, dữ liệu, scorer, split, alignment, bốn pilot run | **G1 · 03/11** — task_facts đủ, 4 pilot run NN/PV × B1/B2 mở lại được, thử format nộp bài |
+| Khởi động và nền tảng | 1–3 · 14/10–10/11 | Luật thi, dữ liệu, scorer, split, alignment, bốn pilot run | **G1 · 10/11** (đề xuất lùi từ 03/11, chốt họp 02/11) — task_facts đủ, 4 pilot run NN/PV × B1/B2 mở lại được, thử format nộp bài |
 | Baseline và cải tiến | 4–6 · 04/11–24/11 | Trần điểm, nhiễu seed, backbone, hướng E/L, công cụ so sánh, inference v0 | **G2 · 24/11** — quyết định giữ/bỏ hướng E/L, danh sách thay đổi thiết kế |
 | Khóa recipe và thí nghiệm cuối | 7–8 · 25/11–08/12 | Thử tối đa 4 thay đổi, khóa recipe 01/12, chạy 12 run cuối, kiểm tra rò rỉ | Khóa recipe · 01/12 |
 | Sẵn sàng cho test | 9–10 · 09/12–22/12 | Chọn ứng viên nộp, script dự đoán, tổng duyệt 1, bắt đầu viết bài | **G3 · 22/12** — tổng duyệt 1 chạy hết, chọn bài nộp chính |
@@ -50,21 +60,30 @@ Mỗi mốc kiểm tra trong buổi họp thứ Ba cuối giai đoạn. Mốc n�
 
 Đối chiếu với lộ trình trong `docs/README.md`: Mốc A = G1; Mốc B = G2 + khóa recipe 01/12; Mốc C = tuần 8; Mốc D = tuần 9–13.
 
-## Hiện đang ở đâu (24/10/2026, tuần 2)
+**Hệ quả của việc lùi G1 (đề xuất, chốt họp 02/11).** G2 24/11, khóa recipe 01/12, G3 22/12, G4 05/01 giữ nguyên vì test dự kiến 10/01 không dời được. Tuần 4 (04/11–10/11) trùng tuần 3: ai xong việc tuần 3 của mình thì mới bắt đầu việc tuần 4; phần còn lại bắt đầu sau họp G1. Hướng E0/E1 (Cương) và L (Phát) tạm dừng từ tuần 3 để mỗi người đào sâu một hướng fine-tune; G1 xem lại có mở lại hay không. Nếu đến G1 vẫn chưa đủ bốn pilot, hoãn tiếp các hướng phụ thay vì dời G2.
 
-Kiểm tra theo nội dung repo và `docs/`. Việc nằm ngoài repo (Drive, Codabench, họp nhóm) chưa kiểm được; ghi "chưa thấy bằng chứng" không có nghĩa chưa làm.
+## Hiện đang ở đâu (02/11/2026, đầu tuần 3)
 
-| Hạng mục | Trạng thái |
-|---|---|
-| Dữ liệu English NN/PV, frozen splits (NN 3.490 dòng/446 expression; PV 1.567/160) | Đã có |
-| Code dùng chung: đọc dữ liệu, alignment, split, metrics, results ZIP, web xem kết quả, tests | Đã có |
-| Baseline B0 NN/PV (dev) | Đã có |
-| NN B1/B2 seed 42 (dev). Modifier Spearman 0,446 → 0,503; Head 0,549 → 0,552; RMSE chưa tốt hơn | Đã có |
-| PV B1/B2 | **Chưa chạy** |
-| Checkpoint NN từ run cũ | Hai results ZIP không chứa weights; chưa thấy checkpoint |
-| Luật thi, official metric, format nộp, `task_facts.md` | **Chưa xác nhận** (CodaBench timeout lúc kiểm tra 23/10) |
-| Inference từ checkpoint, nộp bài thật | Chưa làm |
-| Nhiều seed, internal test, paper | Chưa làm |
+Kiểm tra theo nội dung `origin/main`, `origin/plans` và `docs/`. Việc nằm ngoài repo (Drive, Codabench, họp nhóm) chưa kiểm được; ghi "chưa thấy bằng chứng" không có nghĩa chưa làm.
+
+| Hạng mục | Trạng thái 02/11 | Bằng chứng / ghi chú |
+|---|---|---|
+| Dữ liệu English NN/PV, frozen splits (NN 3.490 dòng/446 expression; PV 1.567/160) | Đã có | Không đổi từ 24/10 |
+| Code dùng chung: đọc dữ liệu, alignment, split, metrics, results ZIP, web, 13 test | Đã có, **không đổi từ 23/10** | `main` @ `90061d4`; 3 commit trên `main`, cùng một tác giả (Đạt) |
+| Baseline B0 NN/PV (dev) | Đã có | |
+| NN B1/B2 seed 42 (dev). Modifier Spearman 0,446 → 0,503; Head 0,549 → 0,552; RMSE chưa tốt hơn | Đã có | Một seed trên dev, chưa kết luận được B2 hơn B1 |
+| PV B1/B2 | **Chưa chạy** | Chưa thấy results |
+| Checkpoint NN từ run cũ | Chưa thấy | Hai results ZIP cũ 139/158 KB, không chứa weights; saved version Kaggle chưa kiểm |
+| Exporter mới (results ZIP + model ZIP + `ARTIFACTS.json`) | Chưa xác minh trên saved version GPU | `docs/RUN_GUIDE.md` mục 3 |
+| Tuần 2: MAE tổng trong `evaluate`, test tính tay, test chống lệch code | Chưa thấy trong Git | `metrics.py` chỉ có `mae` trong `error_groups`; chưa có `tests/test_scorer.py` |
+| Tuần 2: `test_alignment.py`, coverage, `alignment_failures.tsv` | Chưa thấy trong Git | `tests/test_pipeline.py` vẫn chỉ có 1 test alignment |
+| Tuần 2: `eda.md`, `split_check.md`, `alignment_report.md` | Không kiểm được | Nằm trong `results/analysis/` (ngoài Git); xác nhận ở họp 02/11 |
+| Quy trình PR và review | Chưa thấy bằng chứng đã chạy | origin chỉ có `main` và `plans`; chưa thấy nhánh của người khác hay dấu hiệu PR; danh sách PR và bảo vệ `main` chưa kiểm được; chưa rõ Cương, Phát có quyền ghi chưa |
+| Luật thi, official metric, format nộp, `task_facts.md` | **Chưa xác nhận** | Chưa có `plan/task_facts.md`; CodaBench timeout 23/10, chưa thấy lần thử lại |
+| Inference từ checkpoint, `PREDICT_kaggle.ipynb`, nộp bài thật | Chưa làm | Notebook đã có `predict_checkpoint(directory, records)` làm nền |
+| Nhiều seed, internal test, paper | Chưa làm | |
+
+Hướng train tuần 3: `plan/week3.md` mục 4; mẫu report: mục 6; việc tồn đọng để sau G1: mục 8.
 
 Checkout hiện tại không có `data/`, `results/`, `.venv/` (bị `.gitignore`); copy từ máy cũ hoặc Drive khi cần chạy web/test.
 
@@ -72,7 +91,9 @@ Checkout hiện tại không có `data/`, `results/`, `.venv/` (bị `.gitignore
 
 Ai làm khác quy ước thì phải báo cả nhóm trước.
 
-**Lịch họp và hạn nộp.** Mỗi tuần chạy từ thứ Tư đến thứ Ba. Hạn của việc trong tuần là 20:00 thứ Ba. Họp 45 phút lúc 21:00 thứ Ba: mỗi người 5 phút nói kết quả và vướng mắc, Khang ghi biên bản vào `plan/meetings.md`. Ngoại lệ tuần 2: hạn 20:00 Chủ nhật 01/11, họp 21:00 Thứ Hai 02/11.
+**Lịch họp và hạn nộp.** Mỗi tuần chạy từ thứ Tư đến thứ Ba. Hạn của việc trong tuần là 20:00 thứ Ba. Họp 45 phút lúc 21:00 thứ Ba: mỗi người 5 phút nói kết quả và vướng mắc, Khang ghi biên bản vào `plan/meetings.md`. Ngoại lệ tuần 2: hạn 20:00 Chủ nhật 01/11, họp 21:00 Thứ Hai 02/11. Ngoại lệ tuần 3: bắt đầu thứ Hai 02/11 sau họp, hạn 20:00 Thứ Ba 10/11, họp G1 21:00 cùng ngày; thêm một check-in bằng chat lúc 20:00 Thứ Năm 05/11 (mỗi người 3 dòng: xong, đang làm, vướng), không họp. Từ tuần 4 trở lại chu kỳ thứ Tư đến thứ Ba.
+
+**Report hàng tuần.** Mỗi người nộp một report tối đa 1 trang theo mẫu ở `plan/week3.md` mục 6, lưu ở Drive `CompartMent/reports/week<N>_<tên>.md`, để Khang đọc trước họp. Tuần 3 nộp 20:00 Thứ Hai 09/11; các tuần sau nộp cùng hạn việc (20:00 Thứ Ba). Report chỉ ghi số và ID dòng, không chép câu trích từ dữ liệu.
 
 **Repo và thư mục.** Repo `m1hdat/CoSense`. Mọi thay đổi vào `main` qua pull request có ít nhất một người khác review. Cấu trúc:
 
@@ -112,7 +133,7 @@ Dữ liệu, results và mọi báo cáo có trích câu context **không lên G
 
 ## Tuần 1 (14/10–20/10): Khởi động
 
-Cuối tuần này cả nhóm đã đăng ký cuộc thi, có dữ liệu, có môi trường chạy chung và biết bài nộp được chấm thế nào. **Trạng thái 24/10: dữ liệu và công cụ đã có; phần luật thi vẫn mở.**
+Cuối tuần này cả nhóm đã đăng ký cuộc thi, có dữ liệu, có môi trường chạy chung và biết bài nộp được chấm thế nào. **Trạng thái 24/10: dữ liệu và công cụ đã có; phần luật thi vẫn mở.** **02/11:** chưa thấy bằng chứng cho `task_facts.md`, quyền ghi và bảo vệ `main`, ghi chú đọc của Đạt và Phát, và việc cả 4 người đã chạy pytest/web/smoke B1; để sau G1, ghi ở `plan/week3.md` mục 8 (smoke B1 nay được thay bằng việc mỗi người train hướng riêng trên Kaggle của mình).
 
 ### Khang: Đăng ký cuộc thi và chốt các thông tin còn thiếu
 
@@ -207,7 +228,7 @@ Cuối tuần này cả nhóm đã đăng ký cuộc thi, có dữ liệu, có m
 
 **Hạn việc 20:00 Chủ nhật 01/11, họp 21:00 Thứ Hai 02/11.** Tuần 2 kéo dài hơn một tuần quy ước nên chồng với tuần 3; thứ tự việc và các hạn nhỏ nằm ở `plan/week2.md`.
 
-Cuối tuần này có bốn công cụ dùng chung đã được kiểm tra: bộ đọc dữ liệu, scorer nội bộ, split cố định, và hàm tìm cụm từ trong câu. **Trạng thái 24/10: cả bốn đã có trong `src/compartment/`; còn phần đo đạc và báo cáo.**
+Cuối tuần này có bốn công cụ dùng chung đã được kiểm tra: bộ đọc dữ liệu, scorer nội bộ, split cố định, và hàm tìm cụm từ trong câu. **Trạng thái 24/10: cả bốn đã có trong `src/compartment/`; còn phần đo đạc và báo cáo.** **02/11:** chưa thấy nhánh hay commit của Cương (scorer) và Phát (test alignment) trên origin, `main` chưa đổi từ 23/10; các báo cáo nằm ngoài Git nên chờ họp 02/11 xác nhận. Phần chưa xong chuyển sang `plan/week3.md` mục 8 (làm sau G1), các ô chưa tick bên dưới giữ nguyên cho đến khi có bằng chứng.
 
 ### Khang: Bộ đọc dữ liệu và phân tích khám phá
 
@@ -274,9 +295,11 @@ Cuối tuần này có bốn công cụ dùng chung đã được kiểm tra: b�
 - [ ] Có số coverage theo task × split và danh sách thất bại
 - [ ] Mỗi loại bẫy ở tuần 1 có ít nhất một test
 
-## Tuần 3 (28/10–03/11): Mốc A và nộp thử (G1)
+## Tuần 3 (02/11–10/11): Mốc A và nộp thử (G1)
 
-Cuối tuần này có bốn pilot run hợp lệ NN/PV × B1/B2 (Mốc A), `task_facts.md` đã trả lời, và format nộp bài đã được thử. Đây là mốc G1.
+Cuối tuần này có bốn pilot run hợp lệ NN/PV × B1/B2 (Mốc A), `task_facts.md` đã trả lời, và format nộp bài đã được thử. Đây là mốc G1 (đề xuất lùi từ 03/11 sang 10/11).
+
+**Thay đổi so với bản 24/10.** Ngày: tuần 3 nay là 02/11–10/11 (trước là 28/10–03/11). Trọng tâm: mỗi người train một hướng fine-tune (Đạt: baseline PV và nhiễu seed; Cương: hiệu chỉnh độ lệch đầu ra; Khang: B3; Phát: RoBERTa), mẫu *vấn đề → giả thuyết → một thay đổi → metric → giữ/bỏ*; chi tiết ở `plan/week3.md` mục 4. Vì vậy các mục dưới đây của Cương (E0 v1) và Phát (khảo sát LLM) **tạm dừng**; mục của Đạt (Mốc A) là hướng của Đạt; mục của Khang giữ `task_facts.md` và format nộp như việc nền, làm sau G1 trừ email gửi ban tổ chức.
 
 ### Khang: Pipeline nộp bài, bảng thí nghiệm, họp G1
 
@@ -358,6 +381,8 @@ Cuối tuần này có bốn pilot run hợp lệ NN/PV × B1/B2 (Mốc A), `tas
 ## Tuần 4 (04/11–10/11): Trần điểm, nhiễu seed, baseline đầy đủ
 
 Cuối tuần này mọi hướng đều có điểm dev, và nhóm biết điểm trần thực tế cùng mức nhiễu do seed.
+
+**Lưu ý 02/11:** tuần 4 trùng tuần 3 (G1 lùi sang 10/11). Chỉ bắt đầu việc dưới đây khi người đó đã xong hướng train của tuần 3. Mục "Nhiễu seed" của Đạt đã làm trong tuần 3 (NN B1/B2 seed 43, 44; `plan/week3.md` mục 4.1), nên tuần 4 chỉ còn PV nếu quota cho phép. Việc tuần 4 của Cương (E0 v2) và Phát (prompt LLM) tạm dừng cùng E0/LLM của tuần 3. Hướng tuần 4 sẽ chốt ở họp G1 10/11 theo kết quả các hướng train (`plan/week3.md` mục 7); hạn chưa dời.
 
 ### Khang: Điểm trần và vai trò của type-level
 
@@ -975,4 +1000,8 @@ Rủi ro lớn nhất là luật cuộc thi khác với giả định của kế
 | Test có nhiều expression đã gặp trong train | `task_facts.md` câu 4 | Không chia lại split cố định; thêm đối chứng seen/unseen (RQ2) thiết kế trước khi xem kết quả; xem lại vai trò B1 (nhớ expression) và trọng số ensemble |
 | Đồng bộ code dùng chung giữa nhiều notebook | Hai notebook khác nhau ở `align`/metrics | Chỉ giữ hướng E/L khi G2 quyết định; mỗi lần sửa phải cập nhật tất cả notebook và chạy `pytest -q` (có test notebook syntax) |
 | Dữ liệu hoặc results chứa context bị đưa lên Git | `git status` thấy file trong `data/`, `results/` | `.gitignore` đã chặn; báo cáo có trích câu để trong `results/analysis/`; chia sẻ qua Drive riêng tư |
-| Ban tổ chức đổi lịch hoặc luật | Forum, email | Khang kiểm tra Codabench ở tuần 1, 6, 8, 13, cập nhật `task_facts.md` và sửa các việc bị ảnh hưởng trong tài liệu này |
+| Ban tổ chức đổi lịch hoặc luật | Forum, email | Khang kiểm tra Codabench ở tuần 1, 3, 6, 8, 13, cập nhật `task_facts.md` và sửa các việc bị ảnh hưởng trong tài liệu này |
+| G1 trượt thêm (thêm 02/11) | Đến 06/11 chưa có PV B1 full run, hoặc đến 10/11 chưa có `task_facts.md` | Hoãn tiếp hướng phụ (E, L); chia PV B1/B2 cho hai người nếu Đạt kẹt quota; vào G1 với giả định mặc định ghi rõ là giả định (Spearman toàn dòng, ID + 2/1 số, English-only). Chi tiết ở `plan/week3.md` mục 7 và 8 |
+| Một người giữ cả repo, code và quota GPU (thêm 02/11) | Cả 3 commit trên `main` do Đạt; kế hoạch giao Đạt toàn bộ run GPU | Tuần 3 mỗi người train hướng riêng trên Kaggle của mình (`plan/week3.md` mục 4) nên ai cũng chạy được notebook; bảng experiments ghi dòng code đã sửa; model ZIP và data ZIP trên Drive chung, không chỉ trên máy hoặc Kaggle của Đạt |
+| Quy trình PR chưa thấy chạy (thêm 02/11) | Chưa thấy nhánh của người khác trên origin hay dấu hiệu PR; chưa rõ `main` đã bảo vệ chưa | Hỏi ngay tại họp 02/11 xem Cương, Phát có quyền ghi chưa; chưa có thì fork và mở PR từ fork. PR đầu tiên là việc đưa hướng thắng của tuần 3 vào notebook repo (sau G1), review chéo. Bật bảo vệ `main` sau khi PR đầu tiên merge |
+| Plan nằm ngoài `main` (thêm 02/11) | `main` không có thư mục `plan/`; `plans` chỉ còn plan, không còn code | Không merge `plans` vào `main`. Mở PR chỉ thêm `plan/` (từ `khang/plan` hoặc cherry-pick hai commit `6a53cdb`, `77bed5b`); kiểm tra `git diff --stat main <nhánh>` chỉ có file trong `plan/` trước khi merge |
