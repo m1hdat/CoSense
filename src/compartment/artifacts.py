@@ -78,6 +78,11 @@ def validate_submission(path,expected_ids,task):
 def submission_zip(path,files):
     if not files: raise ValueError('No settings selected')
     allowed={'en-nn-pred.tsv','en-pv-pred.tsv'}
-    if any(Path(f).name not in allowed for f in files): raise ValueError('Unexpected submission filename')
+    files=[Path(f) for f in files]; names=[f.name for f in files]
+    if any(name not in allowed for name in names): raise ValueError('Unexpected submission filename')
+    if len(names)!=len(set(names)): raise ValueError('Duplicate submission filename')
+    if any(not f.is_file() for f in files): raise ValueError('Missing submission file')
     with zipfile.ZipFile(path,'w',zipfile.ZIP_DEFLATED) as z:
-        for f in files: z.write(f,Path(f).name)
+        for f in files: z.write(f,f.name)
+    with zipfile.ZipFile(path) as z:
+        if z.namelist()!=names: raise ValueError('Submission ZIP member mismatch')

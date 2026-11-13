@@ -8,7 +8,7 @@ import pytest
 from compartment.data import align,load_records
 from compartment.splits import make_splits,validate_splits,seen_unseen_design,diagnostic_manifests
 from compartment.metrics import evaluate,compare_predictions
-from compartment.artifacts import prediction_frame,export_bundle,read_bundle,write_submission,validate_submission
+from compartment.artifacts import prediction_frame,export_bundle,read_bundle,write_submission,validate_submission,submission_zip
 
 
 def fixture_records(task='nn',targets=20):
@@ -89,6 +89,11 @@ def test_bundle_and_submission_validation(tmp_path):
     a,b,c=read_bundle(tmp_path/'results_bundle.zip'); assert len(c)==len(r)
     path=tmp_path/'en-nn-pred.tsv'; write_submission(path,r,f,meta)
     assert validate_submission(path,[x['context_id'] for x in r],'nn')
+    assert path.read_text(encoding='utf-8').split('\t',1)[0]==r[0]['context_id']
+    archive=tmp_path/'submission.zip'; submission_zip(archive,[path])
+    import zipfile
+    with zipfile.ZipFile(archive) as z: assert z.namelist()==['en-nn-pred.tsv']
+    with pytest.raises(ValueError,match='Duplicate'): submission_zip(archive,[path,path])
     with pytest.raises(ValueError,match='order'): write_submission(path,r,f,dict(meta,output_order=['HeadAvg','ModAvg']))
     with pytest.raises(ValueError,match='coverage'): write_submission(path,r,f.iloc[1:],meta)
     f.loc[0,'pred_ModAvg']=np.inf
