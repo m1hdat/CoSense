@@ -9,6 +9,7 @@ Model dự đoán một cụm từ còn giữ nghĩa của các thành phần đ
 | Hiểu tổng thể và chọn việc tiếp theo | [Lộ trình](docs/README.md) |
 | Hiểu điểm gold, công thức và lý do chọn metric | [Metrics](docs/METRICS.md) |
 | Train Kaggle, mở web, giữ checkpoint, chuẩn bị submission | [Cách chạy và nộp bài](docs/RUN_GUIDE.md) |
+| Theo dõi thay đổi, bằng chứng kiểm thử và artifact | [Báo cáo triển khai LaTeX](docs/IMPLEMENTATION_REPORT.tex) |
 
 ## Mở web local
 

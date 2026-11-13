@@ -7,13 +7,35 @@
 | File/thư mục | Dùng lúc nào? |
 |---|---|
 | `notebooks/B1_kaggle.ipynb`, `B2_kaggle.ipynb` | Sửa code training trực tiếp, import lên Kaggle |
-| `data/cosense-kaggle-data.zip` | Dataset dữ liệu đã chuẩn bị, không cần tạo lại |
-| `data/splits/{nn,pv}/split_manifest.json` | Danh sách ID train/dev/test cố định |
+| `data/cosense-kaggle-data.zip` | Bundle English train + frozen manifests để đưa lên Kaggle |
+| `data/bundle/split_manifest_{nn,pv}.json` | Danh sách ID train/dev/internal-test cố định |
+| `data/trial/` | Trial English chỉ dùng kiểm tra parser/inference/submission, không train |
+| `scripts/prepare_data_bundle.py` | Audit train/trial và tái tạo bundle theo seed 42 |
+| `scripts/audit_pv_preprocessing.py` | Audit alignment/fallback/truncation PV trong WSL |
+| `scripts/run_pv_smoke_wsl.py` | CPU smoke train PV B1/B2, 16 rows mỗi split |
 | `results/nn_B1_B2_seed42/` | Hai results ZIP NN pilot và phân tích đã có |
 | `results/baselines/` | Baseline B0 NN/PV đã có |
 | `docs/audit/` | Audit cũ; chỉ mở khi cần tìm vấn đề dữ liệu |
 
-Local không train; không cần script build notebook. Khi sửa preprocessing/model/metrics chung, sửa cả hai notebook tương ứng. Không đưa raw data/results chứa context lên Git; quyền phân phối dữ liệu chưa được xác nhận.
+Local không chạy full training; WSL chỉ dùng cho audit và smoke test nhỏ. Không cần script build notebook. Khi sửa preprocessing/model/metrics chung, sửa cả hai notebook tương ứng. Không đưa raw data/results chứa context lên Git; quyền phân phối dữ liệu chưa được xác nhận.
+
+Khi dữ liệu nguồn thay đổi hoặc cần kiểm tra lại bundle, chạy:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\prepare_data_bundle.py
+```
+
+Script giữ nguyên bytes của TSV train, kiểm tra số hàng/target/schema/ID, xác nhận train và trial không trùng ID/target, rồi sinh manifests, `dataset_info.json` và ZIP sáu file. Không sửa manifest bằng tay.
+
+Trong WSL, sau khi kích hoạt environment có PyTorch, Transformers, NumPy, pandas và SciPy:
+
+```bash
+python scripts/audit_pv_preprocessing.py
+python scripts/run_pv_smoke_wsl.py B1
+python scripts/run_pv_smoke_wsl.py B2
+```
+
+Audit chạy toàn bộ frozen split nhưng không đọc gold để chọn model. Hai smoke run chỉ dùng 16 train + 16 dev rows, một epoch và CPU; kết quả PASS xác minh pipeline chứ không phải score nghiên cứu. Full PV vẫn chạy trên Kaggle với `SMOKE=False` và cấu hình khóa bên dưới.
 
 ## 2. Train trên Kaggle
 
@@ -81,25 +103,27 @@ Mở http://localhost:8501. Data explorer đọc TSV; Results explorer upload ha
 
 | Bước | Điều kiện hoàn thành |
 |---|---|
-| Xác nhận rules | Đúng track/language, metric/scorer, filenames, header, ID/order, ZIP layout, submission limits và quyền dùng data/model |
+| Xác nhận rules | Đã xác nhận metric, filenames, không header, số cột và ZIP layout; submission quota, Terms và quyền dùng model/data ngoài vẫn cần xác nhận |
 | Inference từ checkpoint | Đọc official input không có gold, tokenizer/preprocessing giống train, tạo NN hai điểm/PV một điểm |
 | Kiểm tra predictions | Đủ ID, không trùng, đúng thứ tự/cột, toàn số hữu hạn; dùng official sample/checker khi có |
 | Nộp CodaBench | Nền tảng chấp nhận đúng version; giữ receipt/score và bản ZIP chính xác |
 
-`src/compartment/artifacts.py` có helper kiểm tra/xuất TSV theo giả định nội bộ: NN/PV filename và ID + 2/1 số. Helper này **chưa được đối chiếu official format** và chưa phải pipeline inference hoàn chỉnh. Không nộp `results_bundle.zip` của web thay official submission.
+`src/compartment/artifacts.py` đã được đối chiếu với format CodaBench ngày 12/11/2026: `en-nn-pred.tsv` gồm ID + modifier + head, `en-pv-pred.tsv` gồm ID + một prediction, không header, nằm ở root của một ZIP. Helper vẫn chưa phải pipeline inference hoàn chỉnh. Không nộp `results_bundle.zip` của web thay official submission.
 
-Ngày 23/10/2026: [trang Task 5](https://sites.google.com/view/semeval-compartment) dẫn format/rules sang [CodaBench 17971](https://www.codabench.org/competitions/17971/); lần kiểm tra này CodaBench timeout. Các chi tiết chưa xác minh phải được kiểm tra trước khi export/nộp; không suy đoán số lượt nộp hoặc áp dụng rules task khác. Giữ internal test để đánh giá nghiên cứu; official test không dùng tune.
+Ngày 12/11/2026, [CodaBench 17971](https://www.codabench.org/competitions/17971/) xác nhận metric chính là Spearman, kèm context-variance Spearman và RMSE; Practice kết thúc 09/01/2027, Evaluation diễn ra 10–31/01/2027 và Post-evaluation bắt đầu 01/02/2027. Leaderboard Practice chưa hoạt động nhưng scorer vẫn tạo `scores.txt`. Terms đang được cập nhật và trang chưa công bố submission quota; không suy đoán các phần này từ task khác. Giữ internal test để đánh giá nghiên cứu; official test không dùng tune.
 
 ## 6. Tra cứu dữ liệu khi cần
 
 | Task | Rows / expressions | Train / dev / internal-test rows | Đầu ra |
 |---|---|---|---|
-| NN | 3.490 / 446 | 2.479 / 504 / 507 | `ModAvg`, `HeadAvg` |
-| PV | 1.567 / 160 | 1.100 / 231 / 236 | `Avg` |
+| NN train | 3.480 / 444 | 2.483 / 505 / 492 | `ModAvg`, `HeadAvg` |
+| PV train | 1.557 / 158 | 1.093 / 236 / 228 | `Avg` |
+| NN trial | 10 / 2 | Không chia; không train | `ModAvg`, `HeadAvg` |
+| PV trial | 10 / 2 | Không chia; không train | `Avg` |
 
 Split theo expression, gần 70/15/15 số targets, seed42; cùng expression không xuất hiện ở cả train và dev/test. Exact duplicate contexts được giữ cùng partition. Near-duplicate audit không chứng minh không còn paraphrases. Không đổi membership vì đổi training seed.
 
-Data ZIP có sáu file: `en-nn-train.tsv`, `en-pv-train.tsv`, `split_manifest_nn.json`, `split_manifest_pv.json`, `dataset_info.json`, `README.md`. Notebook kiểm tra SHA256/ID coverage và dùng nguyên frozen IDs. Không cần tokenize/đóng gói lại local. Raw TSV giữ nguyên bytes.
+Data ZIP có sáu file: `en-nn-train.tsv`, `en-pv-train.tsv`, `split_manifest_nn.json`, `split_manifest_pv.json`, `dataset_info.json`, `README.md`. Trial không nằm trong ZIP. Notebook kiểm tra SHA256/ID coverage và dùng nguyên frozen IDs. Raw TSV trong ZIP giữ nguyên bytes so với `data/train/`.
 
 Input features chỉ từ expression/context; không đưa gold, annotation Std hay ContextID vào encoder. ID đọc dạng string. Với PV, verb/particle có thể biến hình hoặc đứng cách nhau. Alignment hiện là heuristic; ambiguous/missing dùng expression fallback và giữ rows, không tự xem đó là context prediction thành công. Báo coverage/fallback/truncation theo split.
 

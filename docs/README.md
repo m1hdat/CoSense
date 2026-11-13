@@ -24,18 +24,18 @@ Data + frozen splits → Kaggle train/evaluate → results + checkpoints
 
 Web hỗ trợ hiểu và trình bày kết quả. Muốn thi cần pipeline tạo predictions cho dữ liệu official; web đẹp không thay bước này.
 
-## 2. Hiện đang ở đâu? — kiểm tra ngày 23/10/2026
+## 2. Hiện đang ở đâu? — kiểm tra ngày 12/11/2026
 
 | Hạng mục | Trạng thái / bằng chứng |
 |---|---|
-| Dữ liệu English NN/PV và frozen splits | Đã có trong `data/`; không chia lại |
+| Dữ liệu English NN/PV và frozen splits | Official train ở `data/train/`; trial tách tại `data/trial/`; bundle/manifests sinh bằng script và không chia lại khi train |
 | Baseline B0 NN/PV | Đã có dev results trong `results/baselines/` |
 | NN B1/B2 seed42 | Đã chạy GPU, dev results trong `results/nn_B1_B2_seed42/` |
 | PV B1/B2 | Chưa có kết quả trong workspace |
 | NN/PV nhiều training seeds, final internal test | Chưa hoàn thành |
 | Web xem data/results ZIP | Đã có; chưa inference câu mới |
 | Checkpoint NN từ run cũ | Hai results ZIP không chứa weights; chưa thấy checkpoint local |
-| Pipeline inference + official submission | Chưa hoàn thành/xác nhận theo scorer của ban tổ chức |
+| Format official submission | Đã xác nhận ID + 2/1 prediction, không header, TSV ở root ZIP; pipeline nạp checkpoint và inference official test chưa hoàn thành |
 
 NN pilot có 504 dev rows, 67 expressions:
 
@@ -97,7 +97,7 @@ Team đã xem dữ liệu nguồn khi audit; không tuyên bố internal test ho
 4. Giữ bản submission và receipt/score của đúng version trên CodaBench. Không tự coi ZIP results của web là ZIP submission.
 5. Web: tối thiểu xem/so sánh kết quả; inference câu mới là phần demo sau khi có checkpoint và pipeline đúng.
 
-[Trang Task 5](https://sites.google.com/view/semeval-compartment) hiện ghi evaluation 10–31/01/2027, kiểm tra ngày 23/10/2026. Trang dẫn sang [CodaBench 17971](https://www.codabench.org/competitions/17971/) cho format/rules. CodaBench không tải được trong lần kiểm tra này: official metric, giới hạn nộp, format và lịch paper vẫn cần xác nhận; không lấy quy định của task/năm khác thay thế.
+[CodaBench 17971](https://www.codabench.org/competitions/17971/) được kiểm tra ngày 12/11/2026: metric gồm Spearman, context-variance Spearman và RMSE; format submission là TSV không header với ID + 2/1 prediction; Evaluation diễn ra 10–31/01/2027. Submission quota và Terms vẫn chưa được công bố đầy đủ; không lấy quy định của task/năm khác thay thế.
 
 ## 5. Viết paper từ bằng chứng nào?
 

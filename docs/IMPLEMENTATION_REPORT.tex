@@ -1,0 +1,692 @@
+% !TeX program = lualatex
+% Living technical report for CoSense.
+% Repository rule: every material change must update this file and append a change-log entry.
+\documentclass[11pt,a4paper]{article}
+
+\usepackage{fontspec}
+\defaultfontfeatures{Ligatures=TeX,Scale=MatchLowercase}
+\setmainfont{Times New Roman}
+\setsansfont{Arial}
+\setmonofont{Consolas}
+\usepackage[a4paper,margin=2.3cm]{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{xurl}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{microtype}
+\usepackage{amsmath}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!55!black,
+  urlcolor=blue!65!black,
+  pdftitle={CoSense -- Báo cáo triển khai, thực nghiệm và đánh giá},
+  pdfauthor={Nhóm CoSense}
+}
+\setlist{nosep,leftmargin=1.5em}
+\renewcommand{\arraystretch}{1.18}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\urlstyle{tt}
+\newcommand{\code}[1]{\nolinkurl{#1}}
+\newcommand{\statusok}{\textcolor{green!45!black}{Hoàn thành}}
+\newcommand{\statuspartial}{\textcolor{orange!75!black}{Một phần}}
+\setlength{\emergencystretch}{3em}
+\setlength{\headheight}{14pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{CoSense}
+\rhead{Implementation Report v0.5.0}
+\cfoot{\thepage}
+
+\title{\textbf{CoSense}\\Báo cáo triển khai, thực nghiệm và đánh giá\\SemEval--2027 Task 5 ComPartMent}
+\author{Nhóm CoSense}
+\date{Phiên bản 0.6.0 --- Cập nhật lần cuối: 13/11/2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Tóm tắt điều hành}
+
+Repository hiện có frozen target-disjoint splits cho English noun compounds (NN) và particle verbs (PV), Kaggle data bundle có thể tái tạo, notebook độc lập cho B1/B2, validation cho submission ZIP và đủ bốn pilot full seed 42: NN/PV $\times$ B1/B2. Trên dev NN gồm 505 instances, B2 cải thiện Spearman so với B1 ở cả ModAvg và HeadAvg; B2 giảm RMSE cho ModAvg nhưng tăng nhẹ RMSE cho HeadAvg, đồng thời delta MAE xấu hơn ở cả hai output. Trên dev PV gồm 236 instances, B2 cải thiện đồng thời Spearman, RMSE, delta MAE và có variance correlation dương so với B1. Đây vẫn là bằng chứng một seed; chưa chứng minh lợi ích ổn định qua training seeds.
+
+Checkpoint load/inference của artifact NN và PV training smoke test đã PASS cho cả B1 và B2 trong WSL/Linux CPU bằng PyTorch 2.15.0. Hai saved PV versions trên Kaggle đều chạy thành công và có manifest, history/metrics CSV, model ZIP cùng results ZIP; artifact PV chưa được tải về workspace để strict-load lại. Remote \code{main} đã có handoff 12 run seed 42/43/44 trên split cũ 504 NN dev và 231 PV dev; báo cáo này dùng frozen bundle hiện hành 505/236, nên chưa gộp các số đó vào cùng thống kê. Seeds 43/44 tương thích với bundle hiện hành, phân tích lỗi có hệ thống, final internal-test evaluation và official scorer parity chưa hoàn tất. Internal test tiếp tục được giữ ngoài quá trình chọn recipe. Streamlit chạy local vẫn có hai tests bị Windows Application Control chặn khi import PyArrow.
+
+\section{Mục đích và phạm vi}
+
+Tài liệu này là báo cáo kỹ thuật sống (living technical report) của repository CoSense. Báo cáo ghi lại những thay đổi đã thực hiện, bằng chứng kiểm thử, danh tính artifact, giới hạn còn tồn tại và bước tiếp theo. Sau mỗi thay đổi có ý nghĩa đối với dữ liệu, mô hình, metric, notebook, Streamlit hoặc submission, trạng thái hiện tại và nhật ký thay đổi trong tài liệu này phải được cập nhật.
+
+Phạm vi triển khai hiện tại là pipeline English noun compounds (NN) và particle verbs (PV). Dữ liệu German được audit để kiểm tra tính toàn vẹn nhưng chưa được đóng gói vào Kaggle bundle English.
+
+\section{Câu hỏi nghiên cứu và mô hình đối chứng}
+
+Ba câu hỏi định hướng là: (RQ1) thêm context có cải thiện dự đoán so với chỉ đọc expression hay không; (RQ2) mô hình hoạt động thế nào trên expressions không xuất hiện trong task training; và (RQ3) context giúp hoặc gây lỗi ở những nhóm trường hợp nào. Frozen split hiện tại trả lời RQ1 trên unseen task targets; RQ3 cần thêm phân tích theo alignment, fallback, độ dài và annotation uncertainty. Thiết kế này không chứng minh BERT chưa từng gặp expression trong pretraining và không tự tạo đối chứng seen/unseen.
+
+\begin{table}[htbp]
+\centering
+\caption{Định nghĩa B0, B1 và B2}
+\small
+\begin{tabularx}{\textwidth}{@{}p{0.09\textwidth}p{0.27\textwidth}YY@{}}
+\toprule
+Model & Input & Cách dự đoán & Vai trò \\
+\midrule
+B0 & Không đọc input & Luôn dự đoán mean label của train, riêng cho từng output & Mốc tối thiểu để kiểm tra model học hơn constant predictor \\
+B1 & Canonical expression, ví dụ \emph{flea market} & BERT fine-tune; mean-pool token của hai constituents; nối hai vector và hồi quy & Đối chứng không có sentence context \\
+B2 & Câu gốc chứa expression & Cùng BERT, pooling và regression head như B1, nhưng token representations được contextualize bởi toàn câu & Kiểm tra đóng góp của sentence context \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+NN có hai output: \code{ModAvg} cho modifier và \code{HeadAvg} cho head; PV có một output \code{Avg}. B1/B2 dùng cùng head gồm dropout 0.1 và một linear layer từ vector nối của hai constituent pools tới số output. Loss là masked mean-squared error, tính riêng từng output hợp lệ rồi lấy trung bình để các output có trọng số bằng nhau. B2 dùng expression fallback có log khi alignment sentence không giải quyết được; coverage fallback phải được báo trước khi diễn giải context effect. Hướng nghiên cứu là đo lợi ích của context, không tuyên bố một kiến trúc mới.
+
+\section{Nguồn và quy ước dữ liệu}
+
+Nguồn chính thức được đối chiếu tại trang CodaBench của SemEval--2027 Task 5:
+\begin{center}
+\url{https://www.codabench.org/competitions/17971/}
+\end{center}
+
+CodaBench phân biệt rõ training data và trial data. Trial English có 2 targets và 10 instances cho mỗi task, không thuộc main train/test split. Vì vậy:
+\begin{itemize}
+  \item \code{data/train/} là nguồn duy nhất để sinh frozen split và huấn luyện;
+  \item \code{data/trial/} chỉ dùng kiểm tra parser, inference, submission format và scorer;
+  \item không cộng trial vào số lượng ``official training'' và không dùng trial để chọn model.
+\end{itemize}
+
+\subsection{Kết quả kiểm kê}
+
+\begin{table}[htbp]
+\centering
+\caption{Số lượng dữ liệu đã audit}
+\small
+\begin{tabularx}{\textwidth}{@{}l l r r Y@{}}
+\toprule
+Ngôn ngữ & Task/split & Instances & Targets & Vai trò \\
+\midrule
+English & NN train  & 3,480 & 444 & Training chính thức \\
+English & PV train  & 1,557 & 158 & Training chính thức \\
+German  & NN train  & 3,298 & 461 & Đã audit, chưa vào bundle \\
+German  & PV train  & 1,490 & 158 & Đã audit, chưa vào bundle \\
+English & NN trial  & 10 & 2 & Integration test \\
+English & PV trial  & 10 & 2 & Integration test \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Metadata cũ ghi NN là 3,490/446 và PV là 1,567/160. Chênh lệch đúng bằng trial data (10 instances, 2 targets mỗi task), cho thấy số cũ là tổng train + trial chứ không phải training chính thức. Không có bằng chứng cho thấy TSV train hiện tại bị hỏng hoặc cần xóa dòng.
+
+\subsection{Kiểm tra tính toàn vẹn}
+
+Loader đã xác nhận cho cả sáu TSV:
+\begin{itemize}
+  \item đúng schema và số cột;
+  \item không thiếu trường định danh/văn bản bắt buộc;
+  \item không trùng \code{ContextID} trong từng file;
+  \item nhãn và annotation standard deviation hữu hạn;
+  \item train và trial English không trùng ID hoặc target;
+  \item raw TSV không bị sửa khi đưa vào bundle.
+\end{itemize}
+
+Trạng thái alignment \code{missing} hoặc \code{ambiguous} không được xem là dữ liệu hỏng. Đây là kết quả của heuristic alignment, đặc biệt đối với particle verbs tách rời/biến hình và dữ liệu German chưa có morphology phù hợp.
+
+PV audit bằng đúng logic B2 notebook và tokenizer BERT đã lưu cho thấy train có 417 exact, 502 inflection, 121 missing và 53 ambiguous; dev lần lượt là 96, 108, 16 và 16; internal test là 88, 115, 14 và 11. Expression fallback được kích hoạt đúng cho toàn bộ missing/ambiguous: 174/1,093 train rows, 32/236 dev rows và 25/228 internal-test rows. Không có row nào bị truncate ở \code{max_length=128}. Internal-test coverage chỉ là preprocessing audit không dùng gold labels; không được dùng để chọn recipe.
+
+\section{Frozen internal split}
+
+Frozen manifests được sinh từ official English training data với seed 42. Đây là split nội bộ phục vụ train/dev/internal-test, khác với official 80/20 train/test split do ban tổ chức quản lý.
+
+Chính sách split:
+\begin{itemize}
+  \item target-disjoint: một expression chỉ thuộc một partition;
+  \item gần tỷ lệ 70/15/15 theo số targets;
+  \item phân tầng gần đúng theo target-level mean label;
+  \item exact duplicate contexts được nối thành component và giữ cùng partition;
+  \item kiểm tra toàn bộ ID coverage, không trùng partition và không target leakage.
+\end{itemize}
+
+\begin{table}[htbp]
+\centering
+\caption{Frozen internal split, seed 42}
+\begin{tabular}{@{}llrr@{}}
+\toprule
+Task & Partition & Instances & Targets \\
+\midrule
+NN & Train & 2,483 & 310 \\
+NN & Dev & 505 & 67 \\
+NN & Internal test & 492 & 67 \\
+\midrule
+PV & Train & 1,093 & 110 \\
+PV & Dev & 236 & 24 \\
+PV & Internal test & 228 & 24 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Các manifest hiện hành:
+\begin{itemize}
+  \item \code{data/bundle/split_manifest_nn.json};
+  \item \code{data/bundle/split_manifest_pv.json}.
+\end{itemize}
+
+\section{Kaggle data bundle}
+
+Script \code{scripts/prepare_data_bundle.py} gọi logic trong \code{src/compartment/bundle.py} để audit và tái tạo bundle. ZIP được ghi theo thứ tự, timestamp và quyền file cố định nhằm cho kết quả byte-reproducible khi input và code không đổi.
+
+\subsection{Cấu trúc ZIP}
+
+\begin{verbatim}
+cosense-kaggle-data.zip
+|-- README.md
+|-- dataset_info.json
+|-- en-nn-train.tsv
+|-- en-pv-train.tsv
+|-- split_manifest_nn.json
+`-- split_manifest_pv.json
+\end{verbatim}
+
+Trial và German không nằm trong ZIP English. Artifact hiện tại:
+\begin{itemize}
+  \item đường dẫn: \code{data/cosense-kaggle-data.zip};
+  \item kích thước: 387,695 bytes;
+  \item nội dung: đúng sáu file ở root như cấu trúc phía trên.
+\end{itemize}
+
+\subsection{Lệnh tái tạo}
+
+\begin{verbatim}
+.\.venv\Scripts\python.exe scripts\prepare_data_bundle.py
+\end{verbatim}
+
+\code{dataset_info.json} lưu phiên bản bundle, nguồn chính thức, ngày xác minh, thống kê audit, train/trial separation và số lượng từng internal partition. Raw data và artifact nằm trong \code{data/}, được \code{.gitignore} loại khỏi Git để tránh phát tán dữ liệu.
+
+\section{Protocol thực nghiệm}
+
+\subsection{Cấu hình kiểm soát}
+
+\begin{table}[htbp]
+\centering
+\caption{Cấu hình chung của pilot NN B1/B2 seed 42}
+\small
+\begin{tabularx}{\textwidth}{@{}p{0.28\textwidth}YY@{}}
+\toprule
+Thành phần & B1 & B2 \\
+\midrule
+Backbone & BERT base uncased, revision được pin trong notebook/metadata & Giống B1 \\
+Input & Canonical expression & Original context; expression fallback khi alignment lỗi \\
+Head capacity & Hai constituent mean pools, dropout 0.1, linear regression & Giống B1 \\
+Optimizer/schedule & AdamW; linear decay về 0; không warmup; gradient clipping 1.0 & Giống B1 \\
+Learning rate & $2\times10^{-5}$ & $2\times10^{-5}$ \\
+Batch/accumulation & 8 / 2; effective batch 16 & Giống B1 \\
+Max length/layer & 128 / last hidden layer & Giống B1 \\
+Epoch budget & Tối đa 8, early-stopping patience 2 & Giống B1 \\
+Observed epochs & 8 & 5 do early stopping \\
+Training/split seed & 42 / 42 & 42 / 42 \\
+Internal test & Không đánh giá & Không đánh giá \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Hai run có cùng ngân sách tối đa; số epoch quan sát khác nhau là kết quả của early stopping, không phải B2 được cấp budget thấp hơn. Notebook seed Python, NumPy, PyTorch và mọi CUDA devices, đồng thời seed DataLoader generator. Cross-device bitwise equivalence không được bảo đảm.
+
+Kaggle cấp runtime gắn nhãn GPU T4 x2, nhưng code chỉ chọn default \code{cuda} device và không dùng DataParallel hoặc DistributedDataParallel. Vì vậy báo cáo chỉ ghi môi trường được cấp phát là T4 x2; không khẳng định cả hai GPU đã tham gia huấn luyện. Runtime chỉ dùng làm thông tin vận hành, không phải benchmark hiệu năng phần cứng.
+
+\subsection{Checkpoint selection và quy ước epoch}
+
+Với mỗi epoch, notebook tính Spearman riêng cho từng output hợp lệ trên dev. Score chọn checkpoint là:
+\[
+S_{\mathrm{select}}=\frac{1}{K}\sum_{k=1}^{K}\rho_k,
+\]
+trong đó $K$ là số output có Spearman xác định. Nếu chưa output nào có Spearman xác định, notebook tạm chọn RMSE trung bình thấp hơn; không thay giá trị không xác định bằng 0. Early stopping dừng trước epoch kế tiếp sau hai epoch liên tiếp không cải thiện score.
+
+History lưu \code{epoch} theo chỉ số bắt đầu từ 0. Báo cáo dùng định dạng ``index $e$ (training epoch $e+1$)''. Theo quy ước này, B2 best checkpoint ở index 2, tức training epoch 3. Bằng chứng B1 hiện chỉ ghi training epoch 8 từ output giao diện; raw zero-based index của B1 chưa được lưu trong báo cáo và không được suy đoán.
+
+\subsection{Metric và hướng diễn giải}
+
+Spearman (cao hơn tốt hơn) là metric nội bộ chính để chọn checkpoint và đánh giá thứ hạng. RMSE (thấp hơn tốt hơn) đo absolute error và phạt lỗi lớn. Delta MAE là diagnostic nội bộ cho thay đổi giữa mọi cặp context của cùng expression:
+\[
+D_t=\frac{1}{\binom{n_t}{2}}\sum_{i<j}
+\left|(y_{ti}-y_{tj})-(\hat y_{ti}-\hat y_{tj})\right|,
+\qquad
+\mathrm{DeltaMAE}=\frac{1}{T}\sum_t D_t.
+\]
+Mỗi expression có trọng số bằng nhau; expression chỉ có một context bị loại. Variance correlation thực chất là Spearman giữa gold và predicted standard deviation qua context của từng expression (\code{ddof=0}); đây là diagnostic chứ không phải variance theo nghĩa bình phương. Chi tiết pairwise-finite, tie handling và coverage nằm trong \code{src/compartment/metrics.py} và \code{docs/METRICS.md}.
+
+B1 dự đoán cùng một giá trị cho mọi occurrence của một expression, nên predicted within-expression standard deviation luôn bằng 0 và variance correlation không xác định. Đây là hệ quả thiết kế, không phải tự động là lỗi metric. Danh sách metric của cuộc thi đã được đối chiếu, nhưng parity giữa implementation nội bộ và official scorer chưa được xác minh; hai loại kết quả phải được báo riêng khi scorer chính thức có sẵn.
+
+\section{Kaggle notebooks và các full run}
+
+Dataset riêng tư đã được tạo trên Kaggle và gắn làm input cho notebook:
+\begin{itemize}
+  \item Dataset: \url{https://www.kaggle.com/datasets/hnphat/cosense-semeval-2027-data};
+  \item Notebook: \url{https://www.kaggle.com/code/hnphat/cosense-b1-nn-full-seed42/edit}.
+\end{itemize}
+
+Notebook \code{notebooks/B1_kaggle.ipynb} là bản độc lập: code đọc dữ liệu, kiểm tra frozen split, alignment, tokenization, training, metric và đóng gói artifact nằm trực tiếp trong notebook. Cấu hình đầy đủ được khóa trong protocol phía trên. Internal test bị tắt để tránh dùng test khi chọn recipe.
+
+\subsection{B1 NN full run}
+
+Draft session đã chạy đủ 8 training epochs, chọn checkpoint ở training epoch 8 và hoàn tất phần notebook trong 617.83 giây. Môi trường quan sát gồm PyTorch 2.11.0, Transformers 5.20.2, Tokenizers 0.23.3, NumPy 2.1.3, Pandas 2.3.3 và SciPy 1.16.3. Split đọc được đúng 2,483 train, 505 dev và 492 internal-test rows; chỉ train/dev được dùng trong lần chạy này. Saved Version~\#2 sau đó tái tạo cùng metrics và hoàn tất với runtime Kaggle 12 phút 11 giây.
+
+\begin{table}[htbp]
+\centering
+\caption{B1 NN seed 42 --- dev metrics tại best checkpoint}
+\small
+\begin{tabularx}{\textwidth}{@{}lrrrrY@{}}
+\toprule
+Output & $N$ & Spearman & RMSE & Delta MAE & Variance correlation \\
+\midrule
+ModAvg  & 505 & 0.502025 & 0.894643 & 0.569289 & Không xác định (NA) \\
+HeadAvg & 505 & 0.463989 & 0.787635 & 0.564190 & Không xác định (NA) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Mean dev Spearman của hai output là 0.483007; train loss cuối epoch 8 là 0.312499. Đây là kết quả dev của một seed, do đó chỉ là pilot và chưa đủ để kết luận nghiên cứu hoặc so sánh cuối cùng giữa B1 và B2.
+
+Draft session ban đầu tạo bốn artifact chính tại root \code{/kaggle/working}:
+\begin{itemize}
+  \item \code{NN_B1_seed42_full_results.zip}: 137,925 bytes;
+  \item \code{NN_B1_seed42_full_model.zip}: 438,842,282 bytes;
+  \item \code{NN_B1_seed42_full_metrics.csv}: 258 bytes;
+  \item \code{NN_B1_seed42_full_history.csv}: 644 bytes.
+\end{itemize}
+
+Draft session đã hết hạn trước khi Quick Save kèm output. Vì vậy, một \emph{Save \& Run All} mới tên \code{B1 NN full seed42} đã được gửi lên Kaggle dưới dạng Version~\#2. Tab Output của đúng saved version đã được xác minh có thư mục \code{cosense_outputs/}, manifest artifact, metrics CSV, history CSV, results ZIP và model ZIP. Bốn artifact chính của saved version là results ZIP 137,938 bytes, model ZIP 438,842,298 bytes, metrics CSV 258 bytes và history CSV 660 bytes; manifest có mặt nhưng kích thước chưa được ghi nhận. Các giá trị draft phía trên chỉ giữ lại để giải thích provenance, không được dùng thay saved artifact.
+
+\subsection{B2 NN full run}
+
+Notebook B2 độc lập đã được chạy trên cùng Dataset Kaggle, frozen split NN seed 42 trong runtime được Kaggle gắn nhãn T4 x2:
+\begin{center}
+\url{https://www.kaggle.com/code/hnphat/cosense-b2-nn-full-seed42/edit}
+\end{center}
+
+Run hoàn tất trong 9 phút 14 giây. History có 5 epochs, index 0 đến 4, rồi dừng sớm đúng theo patience 2. Index 2 (training epoch 3) có \code{dev_spearman} lớn nhất, bằng 0.513434, nên được xác định là best epoch. Thời gian tích lũy đến checkpoint này là 262.44 giây. Giá trị 0.513434 chính là trung bình Spearman của ModAvg và HeadAvg tại checkpoint, không phải một output thứ ba.
+
+\begin{table}[htbp]
+\centering
+\caption{B2 NN seed 42 --- dev metrics tại best checkpoint}
+\small
+\begin{tabularx}{\textwidth}{@{}lrrrrr@{}}
+\toprule
+Output & $N$ & Spearman & RMSE & Delta MAE & Variance correlation \\
+\midrule
+ModAvg  & 505 & 0.535258 & 0.836082 & 0.595681 & 0.300343 \\
+HeadAvg & 505 & 0.491610 & 0.797171 & 0.625161 & 0.211270 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+ModAvg và HeadAvg là hai output khác nhau, vì vậy không chọn output thắng để đại diện cho toàn model. Báo cáo phải giữ kết quả riêng từng output; score checkpoint của B2 là mean Spearman 0.513434. Đây vẫn là kết quả dev của một seed và chưa đủ để kết luận độ ổn định giữa các seed.
+
+Saved output của B2 đã được xác minh có đủ năm artifact:
+\begin{itemize}
+  \item \code{NN_B2_seed42_full_ARTIFACTS.json}: 620 bytes;
+  \item \code{NN_B2_seed42_full_history.csv}: 424 bytes;
+  \item \code{NN_B2_seed42_full_metrics.csv}: 295 bytes;
+  \item \code{NN_B2_seed42_full_model.zip}: 438.84 MB;
+  \item \code{NN_B2_seed42_full_results.zip}: 156.81 kB.
+\end{itemize}
+Hai kích thước ZIP được giữ theo giá trị làm tròn mà giao diện Kaggle hiển thị; không quy đổi thành số byte giả định.
+
+\subsection{B0 và so sánh pilot B0/B1/B2}
+
+B0 được tái tính ngày 13/11/2026 trực tiếp từ frozen NN split hiện hành: mean label chỉ lấy trên 2,483 train rows rồi dự đoán hằng số cho 505 dev rows. Kết quả B0 là ModAvg mean 3.670558, RMSE 0.942695; HeadAvg mean 3.913467, RMSE 0.913339. Spearman và variance correlation của B0 không xác định vì prediction là hằng số. Delta MAE lần lượt là 0.569289 và 0.564190.
+
+\begin{table}[htbp]
+\centering
+\caption{Pilot NN seed 42 trên cùng frozen dev split ($N=505$)}
+\small
+\begin{tabularx}{\textwidth}{@{}llrrrrY@{}}
+\toprule
+Output & Model & Spearman & RMSE & Delta MAE & Var. corr. & Ghi chú \\
+\midrule
+ModAvg & B0 & NA & 0.942695 & 0.569289 & NA & Constant train mean \\
+ModAvg & B1 & 0.502025 & 0.894643 & 0.569289 & NA & Không đọc context \\
+ModAvg & B2 & 0.535258 & 0.836082 & 0.595681 & 0.300343 & Đọc context \\
+\midrule
+HeadAvg & B0 & NA & 0.913339 & 0.564190 & NA & Constant train mean \\
+HeadAvg & B1 & 0.463989 & 0.787635 & 0.564190 & NA & Không đọc context \\
+HeadAvg & B2 & 0.491610 & 0.797171 & 0.625161 & 0.211270 & Đọc context \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Paired descriptive gain B2 so với B1 trên cùng dev split}
+\small
+\begin{tabularx}{\textwidth}{@{}lrrrY@{}}
+\toprule
+Output & $\Delta$Spearman & RMSE gain & Delta-MAE gain & Diễn giải \\
+\midrule
+ModAvg & $+0.033233$ & $+0.058561$ & $-0.026392$ & Tốt hơn về ranking và RMSE, xấu hơn về within-expression change \\
+HeadAvg & $+0.027621$ & $-0.009536$ & $-0.060971$ & Tốt hơn về ranking, xấu hơn nhẹ về RMSE và xấu hơn về change \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Trong bảng gain, $\Delta$Spearman là B2$-$B1; RMSE gain và Delta-MAE gain là B1$-$B2, nên số dương luôn biểu thị B2 tốt hơn. Mean Spearman chọn checkpoint tăng 0.030427. B1 và B2 đều giảm RMSE so với B0 ở cả hai output, nhưng chỉ B2 tạo prediction thay đổi theo context. B2 có variance correlation dương, song delta MAE xấu hơn B1 ở cả hai output; do đó chưa có bằng chứng nhất quán rằng B2 mô hình hóa đúng biến thiên context. Không có kiểm định nhiều seed hoặc confidence interval trong bảng này.
+
+\section{PV full runs trên Kaggle}
+
+Hai notebook PV dùng cùng Dataset, frozen split, backbone revision, optimizer, batch/accumulation, epoch budget, patience, max length và training/split seed như protocol đã khóa. Cả hai đặt \code{TASK='pv'}, \code{SMOKE=False}, \code{SEED=42}, \code{SPLIT_SEED=42} và không đánh giá internal test. Kaggle gắn nhãn runtime GPU T4 x2; như ở các run NN, code chỉ dùng default \code{cuda} device.
+
+\begin{itemize}
+  \item B1 PV Version~\#3: \url{https://www.kaggle.com/code/hnphat/cosense-b1-pv-full-seed42};
+  \item B2 PV Version~\#2: \url{https://www.kaggle.com/code/hnphat/cosense-b2-pv-full-seed42}.
+\end{itemize}
+
+\subsection{Kết quả dev seed 42}
+
+\begin{table}[htbp]
+\centering
+\caption{Pilot PV seed 42 trên cùng frozen dev split ($N=236$)}
+\small
+\begin{tabularx}{\textwidth}{@{}lrrrrY@{}}
+\toprule
+Model & Spearman & RMSE & Delta MAE & Var. corr. & Runtime Kaggle \\
+\midrule
+B1 & 0.223882 & 1.092943 & 0.901047 & NA & 5 phút 58 giây \\
+B2 & 0.534020 & 0.938626 & 0.842288 & 0.377391 & 4 phút 05 giây \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+B1 chạy đủ 8 epochs và chọn training epoch 8, với log \code{Successfully ran in 357.7s}. B2 saved version chạy thành công trong 244.6 giây. B2 tăng Spearman 0.310138, giảm RMSE 0.154317 và giảm delta MAE 0.058759 so với B1; dấu của cả ba thay đổi đều có lợi cho B2. B1 có variance correlation không xác định vì prediction không đổi giữa các context của cùng expression, trong khi B2 đạt 0.377391. Kết quả này nhất quán với giả thuyết context hữu ích trên pilot PV, nhưng chỉ có một training seed và chưa kèm confidence interval nên chưa đủ để kết luận độ ổn định.
+
+\subsection{Saved artifacts và phạm vi xác minh}
+
+Tab Output của đúng saved version đã được kiểm tra. Mỗi run có đủ năm artifact ở root output:
+\begin{itemize}
+  \item \code{PV_B1_seed42_full_ARTIFACTS.json}, \code{history.csv}, \code{metrics.csv}, \code{model.zip} và \code{results.zip};
+  \item \code{PV_B2_seed42_full_ARTIFACTS.json}, \code{history.csv}, \code{metrics.csv}, \code{model.zip} và \code{results.zip}.
+\end{itemize}
+Manifest của cả hai ghi \code{OUTPUTS_READY}, đúng model/task/seed, \code{smoke=false}. Giao diện hiển thị manifest 619 bytes cho mỗi run, metrics CSV 168 bytes cho B1 và 185 bytes cho B2. Kích thước history/model/results ZIP chưa được ghi lại; các archive PV cũng chưa được tải về workspace để kiểm tra member layout và strict-load checkpoint. Vì vậy trạng thái hiện tại chứng minh saved run và outputs tồn tại, nhưng chưa tương đương mức artifact verification offline đã thực hiện cho NN.
+
+\section{Khả năng tái lập và kiểm tra artifact}
+
+Data bundle, frozen manifests, split seed, training seed, model/task identity, config, package versions và resolved model/tokenizer revision được notebook ghi vào machine-readable metadata. Báo cáo không sao chép giá trị định danh mật mã; chúng nằm trong manifest để đối chiếu tự động. Notebook seed các nguồn ngẫu nhiên chính và có resume checkpoint ở epoch boundary, nhưng không bảo đảm bitwise equivalence giữa thiết bị hoặc phiên bản thư viện.
+
+\begin{table}[htbp]
+\centering
+\caption{Mức xác minh artifact hiện tại}
+\small
+\begin{tabularx}{\textwidth}{@{}p{0.27\textwidth}Yp{0.18\textwidth}@{}}
+\toprule
+Kiểm tra & Bằng chứng hiện có & Trạng thái \\
+\midrule
+Data ZIP layout & Sáu root members, frozen manifests và trial exclusion đã kiểm tra & \statusok \\
+B1 saved outputs & Manifest, metrics/history CSV, results/model ZIP hiện diện ở Version~\#2 & \statusok \\
+B2 saved outputs & Năm artifact hiện diện; metrics/history và kích thước đã đọc & \statusok \\
+Metrics identity & Model/task/seed/split và $N=505$ khớp các CSV được cung cấp & \statusok \\
+Model ZIP reload & WSL CPU đã strict-load B1/B2 checkpoint, tokenizer/config offline và chạy forward pass hữu hạn & \statusok \\
+Results ZIP reopen & B1/B2 results ZIP đã tải, member names đã kiểm tra và giải nén thành công & \statusok \\
+Official inference & Chưa chạy end-to-end trên input không có gold & \statuspartial \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+B1 environment snapshot đã được ghi trong output quan sát; B2 exact package snapshot chưa được trích vào báo cáo. Saved notebook URL hiện dùng đường dẫn chỉnh sửa và chưa phải immutable version link cho mọi run. Trước final experiments cần lưu dataset version, saved notebook version, config, metadata và đường dẫn checkpoint cùng mỗi result; không dựa vào tên file hoặc runtime để nhận diện run.
+
+\section{Submission contract và metric chính thức}
+
+Đối chiếu CodaBench ngày 12/11/2026 xác nhận:
+\begin{itemize}
+  \item NN submission: \code{en-nn-pred.tsv}, mỗi dòng gồm \code{ContextID}, modifier prediction và head prediction;
+  \item PV submission: \code{en-pv-pred.tsv}, mỗi dòng gồm \code{ContextID} và một prediction;
+  \item TSV không có header và nằm ở root của một ZIP;
+  \item có thể tham gia một subset language/task;
+  \item danh sách metric công bố gồm compositionality Spearman, context-variance Spearman và RMSE.
+\end{itemize}
+
+\code{src/compartment/artifacts.py} đã được tăng cường để kiểm tra filename allowlist, file tồn tại, member name không trùng, ZIP member ở root, ID/order/coverage, số cột và prediction hữu hạn. Pipeline nạp checkpoint để inference official test vẫn là công việc tiếp theo; results bundle của Streamlit không phải official submission ZIP. Tên metric đã được đối chiếu, nhưng parity số học với official scorer chưa được kiểm tra vì scorer chính thức chưa được chạy end-to-end.
+
+Các thông tin chưa được công bố đầy đủ tại thời điểm báo cáo gồm submission quota và Terms. Không suy diễn các quy định này từ task hoặc năm khác.
+
+\section{Các file đã thay đổi}
+
+\small
+\begin{longtable}{@{}p{0.29\textwidth}p{0.65\textwidth}@{}}
+\toprule
+File & Vai trò thay đổi \\
+\midrule
+\endhead
+\code{src/compartment/bundle.py} & Audit dữ liệu, kiểm tra train/trial separation, sinh manifest và deterministic ZIP. \\
+\code{scripts/prepare_data_bundle.py} & CLI tái tạo bundle từ repository root. \\
+\code{src/compartment/artifacts.py} & Tăng cường validation official submission ZIP. \\
+\code{tests/test_data_bundle.py} & Synthetic test cho bundle reproducibility, member layout, trial exclusion và target leakage. \\
+\code{tests/test_pipeline.py} & Test no-header TSV, ZIP root layout và duplicate filename. \\
+\code{docs/RUN_GUIDE.md} & Cập nhật số liệu, lệnh build, rules và lịch CodaBench đã xác minh. \\
+\code{docs/README.md} & Cập nhật trạng thái dữ liệu và official submission format. \\
+\code{AGENTS.md} & Quy định cập nhật báo cáo này cho các thay đổi tương lai. \\
+\code{notebooks/verify_artifacts_kaggle.ipynb} & CPU smoke test: load checkpoint/tokenizer B1/B2 offline từ saved notebook outputs và chạy một forward pass. \\
+\code{scripts/verify_saved_artifacts.py} & Local/WSL CPU smoke test cho hai model directories đã giải nén; ghi \code{ARTIFACT_SMOKE_TEST.json}. \\
+\bottomrule
+\end{longtable}
+\normalsize
+
+\section{Kiểm thử và bằng chứng}
+
+\begin{table}[htbp]
+\centering
+\caption{Trạng thái validation cập nhật ngày 13/11/2026}
+\small
+\begin{tabularx}{\textwidth}{@{}p{0.18\textwidth}Yp{0.16\textwidth}@{}}
+\toprule
+Hạng mục & Kết quả & Trạng thái \\
+\midrule
+Core pytest & 12 core tests đã pass trong lần xác minh 12/11; thay đổi v0.4.0 chỉ tác động tài liệu & \statusok \\
+Python compile & \code{python -m compileall -q src scripts tests} & \statusok \\
+Whitespace/diff & \code{git diff --check} không báo lỗi & \statusok \\
+Kaggle ZIP & Đúng 6 root members; split summary được xác minh lại & \statusok \\
+Kaggle B1 draft & Full NN seed 42 hoàn tất 8 epochs; 4 output files được xác minh trong session & \statusok \\
+Kaggle B1 Version~\#2 & Saved version hoàn tất trong 12 phút 11 giây; đủ manifest, CSV và ZIP outputs & \statusok \\
+Kaggle B2 full & 5 epochs rồi early stop; 9 phút 14 giây; năm saved outputs đã được kiểm tra & \statusok \\
+Artifact smoke test & B1/B2 cùng PASS trong WSL CPU với PyTorch 2.15.0; output JSON 514 bytes & \statusok \\
+PV preprocessing & Toàn bộ 1,557 rows audit PASS; fallback 174/32/25 theo train/dev/test; không truncate & \statusok \\
+PV CPU smoke & B1 và B2 cùng train/evaluate PASS trên 16 train + 16 dev rows; không evaluate test & \statusok \\
+Kaggle B1 PV full & Version~\#3 thành công trong 5 phút 58 giây; đủ năm saved outputs; best training epoch 8 & \statusok \\
+Kaggle B2 PV full & Version~\#2 thành công trong 4 phút 05 giây; đủ năm saved outputs & \statusok \\
+PV artifact reload & Saved outputs đã hiện diện trên Kaggle nhưng model/results ZIP chưa tải về để strict-load/reopen offline & \statuspartial \\
+Multi-seed parity & Remote có handoff 12 run trên split cũ 504/231; chưa xác minh tương thích với frozen bundle hiện hành 505/236 & \statuspartial \\
+B0 recomputation & Train means và dev metrics được tái tính trên frozen split 2,483/505 & \statusok \\
+Streamlit tests & 2 tests bị Windows Application Control chặn DLL \code{pyarrow.lib} & \statuspartial \\
+LaTeX build & Dùng LuaLaTeX trong trình soạn thảo tích hợp; compile lại sau thay đổi v0.4.0 & \statusok \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Hai Streamlit failures xảy ra khi import native DLL của PyArrow, trước khi assertion logic ứng dụng hoàn tất. Đây là blocker môi trường cần được xử lý hoặc xác minh trên máy/Kaggle không áp dụng chính sách chặn tương tự; không được báo cáo là Streamlit đã pass đầy đủ.
+
+\section{Trạng thái hiện tại và bước tiếp theo}
+
+\begin{enumerate}
+  \item Tải hai saved PV outputs về workspace riêng tư; ghi kích thước artifact, kiểm tra archive layout, strict-load checkpoint và chạy một forward pass offline như quy trình NN.
+  \item Đọc có hệ thống 10--20 dev examples gồm B2 giúp, B2 làm tệ và fallback/ambiguous; dùng kết quả để chốt hoặc bác bỏ từng thay đổi recipe. Đây là bước nghiên cứu tiếp theo, không phải điều kiện để xác nhận pilot PV đã chạy xong.
+  \item Đối chiếu handoff multi-seed trên remote với bundle hiện hành. Không gộp run split cũ 504/231 với pilot split mới 505/236; nếu không thể tái tạo cùng identity/config thì chạy lại tám run seeds 43/44 trên frozen bundle hiện hành. Sau đó báo mean $\pm$ sample SD và paired gain; nếu bootstrap thì resample theo expression.
+  \item Chỉ sau khi khóa thiết kế mới mở internal test. Không chọn seed hoặc recipe dựa trên internal-test result.
+  \item Dùng trial data để kiểm tra inference, scorer và Practice submission format; không train trên trial và không dùng trial để chọn model.
+  \item Xử lý hoặc xác minh PyArrow trên môi trường cho phép để chạy lại hai test Streamlit.
+  \item Hoàn thành pipeline nạp checkpoint và tạo prediction cho official test khi phát hành; tiếp tục theo dõi submission quota, Terms và scorer trên CodaBench.
+\end{enumerate}
+
+\section{Change log}
+
+\subsection*{2026-11-12 --- v0.1.0 --- Data freeze và Kaggle bundle}
+
+\textbf{Scope.} Audit official train/trial, giải thích chênh lệch metadata, sinh frozen target-disjoint splits, tạo deterministic Kaggle ZIP, cập nhật official submission contract và test.
+
+\textbf{Files.} Thêm \code{src/compartment/bundle.py}, \code{scripts/prepare_data_bundle.py}, \code{tests/test_data_bundle.py}, \code{AGENTS.md} và báo cáo này; sửa artifacts, pipeline tests và tài liệu hướng dẫn.
+
+\textbf{Evidence.} 12 core tests passed; compileall và diff check passed; ZIP có đúng sáu root members; train/trial English có 0 ID overlap và 0 target overlap.
+
+\textbf{Artifact.} \code{cosense-kaggle-data.zip}, 387,695 bytes, gồm đúng sáu file ở root.
+
+\textbf{Known limitations.} Hai Streamlit tests bị Windows Application Control chặn PyArrow DLL; LaTeX chưa được biên dịch do máy không có TeX engine; submission quota và Terms chưa được công bố đầy đủ.
+
+\textbf{Next action.} Upload bundle riêng tư lên Kaggle và chạy smoke-test B1/B2 trước full GPU training.
+
+\subsection*{2026-11-12 --- v0.1.1 --- Sửa Unicode và bố cục báo cáo}
+
+\textbf{Scope.} Chuyển tài liệu sang LuaLaTeX/fontspec để hiển thị Unicode tiếng Việt ổn định; cho phép đường dẫn tự ngắt dòng; thu gọn bảng và tăng khả năng dàn dòng trong margin; loại thông tin định danh mật mã khỏi báo cáo.
+
+\textbf{Files.} Sửa \code{docs/IMPLEMENTATION_REPORT.tex} và quy tắc báo cáo trong \code{AGENTS.md}.
+
+\textbf{Evidence.} Source phiên bản 0.1.1 biên dịch thành công bằng trình biên dịch LaTeX tích hợp; cấu trúc bảng dùng chiều rộng ràng buộc theo \code{textwidth}, còn đường dẫn được phép tự ngắt dòng.
+
+\textbf{Artifact.} Báo cáo LaTeX phiên bản 0.1.1.
+
+\textbf{Known limitations.} Hai Streamlit tests vẫn bị Windows Application Control chặn PyArrow DLL.
+
+\textbf{Next action.} Duy trì cùng cấu hình Unicode và quy tắc bố cục cho mọi cập nhật tiếp theo.
+
+\subsection*{2026-11-12 --- v0.2.0 --- B1 NN full run trên Kaggle}
+
+\textbf{Scope.} Gắn Dataset Kaggle vào notebook B1 độc lập, chạy full NN seed 42 trên GPU, kiểm tra dev metrics và bốn output artifacts, sau đó gửi một saved Version~\#2 bằng Save \& Run All khi giới hạn GPU được reset.
+
+\textbf{Files.} Cập nhật \code{docs/IMPLEMENTATION_REPORT.tex}; notebook liên quan là \code{notebooks/B1_kaggle.ipynb}. Không thay đổi dữ liệu hoặc recipe trong lần cập nhật báo cáo này.
+
+\textbf{Evidence.} Draft run hoàn tất 8 epochs, best epoch 8, mean dev Spearman 0.483007 và thời gian 617.83 giây; notebook xác minh đủ bốn files trong \code{/kaggle/working}. Giao diện Kaggle xác nhận Version~\#2 đang chạy nền trên GPU T4 x2.
+
+\textbf{Artifact.} Draft session tạo \code{NN_B1_seed42_full_results.zip} (137,925 bytes), \code{NN_B1_seed42_full_model.zip} (438,842,282 bytes), \code{NN_B1_seed42_full_metrics.csv} (258 bytes) và \code{NN_B1_seed42_full_history.csv} (644 bytes). Saved Version~\#2 chưa được đánh dấu hoàn tất tại thời điểm ghi báo cáo.
+
+\textbf{Known limitations.} Kết quả hiện chỉ có một seed; variance correlation không xác định trên dev; internal test không được đánh giá; Version~\#2 và output bền vững của saved version chưa được xác minh hoàn tất; Streamlit/PyArrow vẫn bị chặn trên môi trường Windows hiện tại.
+
+\textbf{Next action.} Xác minh Version~\#2 hoàn tất và đủ output, sau đó chạy B2 NN seed 42 cùng budget trước khi mở rộng sang PV và seeds 43/44.
+
+\subsection*{2026-11-12 --- v0.3.0 --- Hoàn tất B1 saved run và B2 NN full run}
+
+\textbf{Scope.} Xác minh B1 saved Version~\#2 hoàn tất và có output bền vững; bổ sung kết quả B2 NN full seed 42, best epoch, metrics cuối và runtime; cập nhật các bước tiếp theo.
+
+\textbf{Files.} Cập nhật \code{docs/IMPLEMENTATION_REPORT.tex}. Notebook liên quan là \code{notebooks/B2_kaggle.ipynb}; không thay đổi dữ liệu, frozen split hoặc code model trong lần cập nhật báo cáo này.
+
+\textbf{Evidence.} B1 Version~\#2 hoàn tất trong 12 phút 11 giây trên GPU T4 x2 và tab Output có đủ manifest, CSV, results ZIP và model ZIP. B2 hoàn tất 5 epochs trong 9 phút 14 giây trên GPU T4 x2; epoch 2 đạt history dev Spearman cao nhất 0.513434. B2 ModAvg đạt Spearman 0.535258, RMSE 0.836082, variance correlation 0.300343 và Delta MAE 0.595681 trên 505 dev samples.
+
+\textbf{Artifact.} B1 saved Version~\#2: \code{NN_B1_seed42_full_results.zip} (137,938 bytes), \code{NN_B1_seed42_full_model.zip} (438,842,298 bytes), metrics CSV (258 bytes) và history CSV (660 bytes). B2 tạo metrics CSV, history CSV, results ZIP, model ZIP và manifest \code{NN_B2_seed42_full_ARTIFACTS.json}; kích thước B2 chưa được ghi nhận.
+
+\textbf{Known limitations.} B1 và B2 mới có một seed; chưa có PV experiment; internal test không dùng để chọn recipe; kích thước artifact B2 chưa được lưu; Streamlit/PyArrow vẫn bị Windows Application Control chặn trong hai tests.
+
+\textbf{Next action.} Ghi lại kích thước artifact B2, sau đó chạy B1/B2 cho PV và lặp recipe đã khóa với seeds 43/44 trước khi kết luận so sánh model.
+
+\subsection*{2026-11-12 --- v0.3.1 --- Bổ sung kích thước artifact B2}
+
+\textbf{Scope.} Hoàn thiện provenance của B2 NN full seed 42 bằng cách ghi lại kích thước toàn bộ năm artifact từ saved output trên Kaggle.
+
+\textbf{Files.} Cập nhật \code{docs/IMPLEMENTATION_REPORT.tex}; không thay đổi notebook, dữ liệu, model hoặc metric.
+
+\textbf{Evidence.} Giao diện Output của saved run B2 hiển thị manifest 620 bytes, history CSV 424 bytes, metrics CSV 295 bytes, model ZIP 438.84 MB và results ZIP 156.81 kB.
+
+\textbf{Artifact.} \code{NN_B2_seed42_full_ARTIFACTS.json} (620 bytes), \code{NN_B2_seed42_full_history.csv} (424 bytes), \code{NN_B2_seed42_full_metrics.csv} (295 bytes), \code{NN_B2_seed42_full_model.zip} (438.84 MB) và \code{NN_B2_seed42_full_results.zip} (156.81 kB). Hai số ZIP là giá trị làm tròn của giao diện Kaggle.
+
+\textbf{Known limitations.} B1 và B2 mới có một seed; chưa có PV experiment; hai kích thước ZIP B2 chưa có số byte chính xác; Streamlit/PyArrow vẫn bị Windows Application Control chặn trong hai tests.
+
+\textbf{Next action.} Chạy B1/B2 cho PV và lặp recipe đã khóa với seeds 43/44 trước khi kết luận so sánh model.
+
+\subsection*{2026-11-13 --- v0.4.0 --- Chuẩn hóa báo cáo thực nghiệm}
+
+\textbf{Scope.} Chuyển báo cáo từ implementation log sang cấu trúc research-ready: thêm executive summary, RQ1--RQ3, định nghĩa B0/B1/B2, architecture/loss, controlled configuration, checkpoint rule, epoch convention, metric definitions, baseline B0, paired B1/B2 comparison, reproducibility và artifact QA.
+
+\textbf{Files.} Cập nhật \code{docs/IMPLEMENTATION_REPORT.tex}; đối chiếu \code{notebooks/B1_kaggle.ipynb}, \code{notebooks/B2_kaggle.ipynb}, \code{src/compartment/metrics.py}, \code{docs/METRICS.md} và frozen data/manifest. Không thay đổi model, notebook, split hoặc raw data.
+
+\textbf{Evidence.} B0 được tái tính trên đúng 2,483 train/505 dev rows. Notebook source xác nhận B1/B2 có cùng maximum budget 8 epochs, patience 2, backbone/head capacity, optimizer và seed; B2 dừng sau 5 epochs do early stopping. Checkpoint score được xác nhận là mean valid-output dev Spearman. Code chỉ chọn default CUDA device và không có multi-GPU wrapper.
+
+\textbf{Artifact.} Báo cáo LaTeX \code{docs/IMPLEMENTATION_REPORT.tex} phiên bản 0.4.0, kích thước source 38,839 bytes tại bước kiểm tra; các model/results artifact không được tái tạo trong lần chỉnh tài liệu này.
+
+\textbf{Known limitations.} Chỉ có NN seed 42; chưa có PV/multi-seed/internal-test result; B1 raw zero-based best-epoch index chưa được ghi nhận; B2 exact package snapshot và immutable saved-version link chưa được trích; model ZIP chưa được load smoke-test; official scorer parity và Streamlit/PyArrow chưa hoàn tất.
+
+\textbf{Next action.} Xác minh load/inference từ saved artifacts, chạy pilot PV, phân tích lỗi để khóa recipe, rồi chạy seeds 42/43/44 trước final internal-test evaluation.
+
+\subsection*{2026-11-13 --- v0.4.1 --- Tải artifact và chuẩn bị smoke test Kaggle}
+
+\textbf{Scope.} Tải saved model/results ZIP của B1/B2, kiểm tra archive layout, giải nén vào workspace riêng tư và chuẩn bị notebook CPU để xác minh checkpoint load cùng một inference forward pass trên Kaggle.
+
+\textbf{Files.} Thêm \code{notebooks/verify_artifacts_kaggle.ipynb}; cập nhật \code{docs/IMPLEMENTATION_REPORT.tex}. Artifact riêng tư được đặt dưới \code{results/nn_B1_B2_seed42/} và không được Git theo dõi.
+
+\textbf{Evidence.} Cả bốn ZIP tải thành công. Model ZIP chứa \code{best.pt}, tokenizer, encoder config, run metadata, history và split manifest; results ZIP chứa predictions, metrics, training history và error-analysis tables. Member names không có đường dẫn bất thường và cả bốn ZIP giải nén thành công. Verifier notebook JSON/code compile check passed.
+
+\textbf{Artifact.} B1 model ZIP 438,842,298 bytes; B1 results ZIP 137,938 bytes; B2 model ZIP 438,841,779 bytes; B2 results ZIP 156,812 bytes; \code{verify_artifacts_kaggle.ipynb} 5,431 bytes.
+
+\textbf{Known limitations.} Local PyTorch import bị Windows Application Control chặn \code{torch_python.dll}, nên checkpoint forward pass chưa hoàn tất. Verifier cần được import lên Kaggle, gắn hai saved notebook outputs và chạy bằng CPU. Hai model predictions trong verifier chỉ là smoke evidence, không phải evaluation result.
+
+\textbf{Next action.} Chạy verifier trên Kaggle, xác nhận cả B1/B2 trả \code{PASS}, lưu \code{ARTIFACT_SMOKE_TEST.json} và saved version URL; sau đó mới đánh dấu artifact verification hoàn tất.
+
+\subsection*{2026-11-13 --- v0.4.2 --- Thêm local artifact verifier}
+
+\textbf{Scope.} Thêm CLI verifier để người dùng tự chạy smoke test trong WSL/Ubuntu mà không cần tắt Windows Application Control hoặc phụ thuộc giao diện Kaggle.
+
+\textbf{Files.} Thêm \code{scripts/verify_saved_artifacts.py}; cập nhật \code{docs/IMPLEMENTATION_REPORT.tex}. Script dùng trực tiếp \code{results/nn_B1_B2_seed42/B1/model} và \code{B2/model}.
+
+\textbf{Evidence.} Python syntax compilation và \code{git diff --check} passed. Script kiểm tra required members, metadata identity, strict state-dict load, tokenizer/config offline load, output shape và prediction hữu hạn; chưa chạy forward pass do native Windows chặn PyTorch DLL.
+
+\textbf{Artifact.} \code{scripts/verify_saved_artifacts.py}, 4,776 bytes; output dự kiến là \code{results/nn_B1_B2_seed42/ARTIFACT_SMOKE_TEST.json}.
+
+\textbf{Known limitations.} Cần WSL/Linux CPU environment có PyTorch và Transformers. Prediction smoke chỉ chứng minh checkpoint load/forward thành công, không thay thế evaluation metrics.
+
+\textbf{Next action.} Chạy CLI trong WSL, xác nhận B1/B2 cùng trả \code{PASS}, rồi cập nhật báo cáo bằng nội dung output JSON.
+
+\subsection*{2026-11-13 --- v0.4.3 --- Xác minh khả năng tải lại artifact B1/B2}
+
+\textbf{Scope.} Hoàn tất smoke test artifact đã lưu bằng local verifier trong WSL/Linux CPU; cập nhật artifact QA và loại bước xác minh này khỏi danh sách công việc còn lại.
+
+\textbf{Files.} Cập nhật \code{docs/IMPLEMENTATION_REPORT.tex}. Verifier sử dụng \code{scripts/verify_saved_artifacts.py}; kết quả riêng tư được ghi tại \code{results/nn_B1_B2_seed42/ARTIFACT_SMOKE_TEST.json} và không được Git theo dõi.
+
+\textbf{Evidence.} Toàn bộ run trả trạng thái \code{PASS} với PyTorch 2.15.0+cpu. B1 strict-load checkpoint index 7 và sinh prediction hữu hạn hai chiều; B2 strict-load checkpoint index 2 và cũng sinh prediction hữu hạn hai chiều. Việc khớp các index với best checkpoint đã ghi nhận cung cấp thêm bằng chứng rằng đúng checkpoint được kiểm tra.
+
+\textbf{Artifact.} \code{ARTIFACT_SMOKE_TEST.json}, 514 bytes, chứa trạng thái tổng, runtime và kết quả riêng cho B1/B2.
+
+\textbf{Known limitations.} Smoke test chỉ chứng minh model package có thể load và thực hiện một forward pass offline; không xác minh lại toàn bộ dev metrics, official inference contract hoặc official scorer parity. Native Windows vẫn chặn PyTorch DLL, nhưng đường chạy WSL đã hoạt động.
+
+\textbf{Next action.} Chạy pilot PV B1/B2 seed 42 trên frozen split và báo alignment/fallback coverage trước khi diễn giải tác động của context.
+
+\subsection*{2026-11-13 --- v0.5.0 --- PV preprocessing audit và CPU smoke training}
+
+\textbf{Scope.} Dùng WSL/Ubuntu để audit toàn bộ PV frozen split bằng đúng preprocessing của notebook B2, sau đó chạy một epoch smoke cho B1 và B2 trên 16 train và 16 dev rows. Không evaluate internal test và không dùng smoke metrics để so sánh model.
+
+\textbf{Files.} Thêm \code{scripts/audit_pv_preprocessing.py} và \code{scripts/run_pv_smoke_wsl.py}; cập nhật \code{docs/RUN_GUIDE.md} và \code{docs/IMPLEMENTATION_REPORT.tex}. JSON outputs riêng tư nằm dưới \code{results/} và không được Git theo dõi.
+
+\textbf{Evidence.} Audit 1,557 PV rows PASS. B2 expression fallback là 174/1,093 train, 32/236 dev và 25/228 internal-test rows; mọi fallback đều do alignment missing/ambiguous và không có truncation ở độ dài 128. B1/B2 CPU smoke cùng hoàn tất train, dev evaluation và export; mỗi run dùng 16 train và 16 dev rows, best epoch index 0. WSL environment được bổ sung pandas và SciPy để chạy pipeline; backbone revision khóa được tải và cache cục bộ.
+
+\textbf{Artifact.} \code{pv_preprocessing_audit_seed42.json} 1,128 bytes; \code{pv_smoke_wsl/B1_seed42.json} 1,113 bytes; \code{pv_smoke_wsl/B2_seed42.json} 1,108 bytes; hai scripts lần lượt 3,024 và 2,942 bytes.
+
+\textbf{Known limitations.} Smoke metrics chỉ dựa trên 16 dev rows và không phải kết quả nghiên cứu. WSL nhận RTX 2050 4 GB nhưng environment hiện dùng PyTorch CPU; full BERT protocol khóa batch size 8 không được tự ý hạ để vừa VRAM. Full PV B1/B2 vẫn cần Kaggle GPU hoặc GPU đủ bộ nhớ.
+
+\textbf{Next action.} Chạy full PV B1/B2 seed 42 trên Kaggle, lưu metrics/history/model/results manifests và đối chiếu identity/config trước paired comparison.
+
+\subsection*{2026-11-13 --- v0.6.0 --- Hoàn tất pilot PV B1/B2 seed 42}
+
+\textbf{Scope.} Chạy hai full PV pilots trên Kaggle bằng frozen split và protocol đã khóa, xác minh đúng identity/config, đọc dev metrics và kiểm tra saved outputs của đúng version. Không mở internal test.
+
+\textbf{Files.} Cập nhật \code{docs/IMPLEMENTATION_REPORT.tex}. Không thay đổi dữ liệu, frozen split, notebook source hoặc recipe trong lần cập nhật báo cáo này.
+
+\textbf{Evidence.} B1 Version~\#3 chạy thành công trong 357.7 giây, đủ 8 epochs và chọn training epoch 8; Spearman 0.223882, RMSE 1.092943, delta MAE 0.901047 trên 236 dev rows. B2 Version~\#2 chạy thành công trong 244.6 giây; Spearman 0.534020, RMSE 0.938626, variance correlation 0.377391 và delta MAE 0.842288. Cả hai dùng PV/full/seed 42 và cùng Dataset.
+
+\textbf{Artifact.} Mỗi saved version có manifest, history CSV, metrics CSV, model ZIP và results ZIP. Manifest của B1/B2 đều 619 bytes; metrics CSV lần lượt 168 và 185 bytes. Các kích thước còn lại chưa được ghi nhận.
+
+\textbf{Known limitations.} Trên frozen bundle hiện hành mới có một training seed; chưa phân tích 10--20 dev examples; chưa tải artifact PV về để strict-load/reopen offline; chưa chạy official scorer hoặc internal test. Remote có multi-seed results trên split cũ 504/231, không được gộp trực tiếp với pilot 505/236. B2 tốt hơn B1 trên toàn bộ metric PV được báo, nhưng chưa có bằng chứng seed variability dưới cùng protocol hiện hành.
+
+\textbf{Next action.} Tải và xác minh offline hai artifact PV, đối chiếu identity với handoff multi-seed trên remote, sau đó thực hiện error analysis trên dev trước khi quyết định tái sử dụng hay chạy lại seeds 43/44.
+
+\appendix
+\section{Mẫu entry cho thay đổi tiếp theo}
+
+Mỗi thay đổi có ý nghĩa phải thêm một entry mới theo cấu trúc:
+\begin{verbatim}
+\subsection*{YYYY-MM-DD --- vX.Y.Z --- Tên thay đổi}
+\textbf{Scope.} ...
+\textbf{Files.} ...
+\textbf{Evidence.} ...
+\textbf{Artifact.} ...
+\textbf{Known limitations.} ...
+\textbf{Next action.} ...
+\end{verbatim}
+
+Khi trạng thái hiện hành thay đổi, phải sửa cả section tương ứng ở phần chính; change log không thay thế current-state documentation.
+
+\end{document}
