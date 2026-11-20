@@ -47,6 +47,6 @@ Khởi tạo `head[1].bias` bằng trung bình nhãn train hữu hạn của t�
 
 Một seed trên dev: RMSE giảm chưa đi kèm thứ hạng tốt hơn. Giữ baseline cho so sánh chính. Chưa nạp checkpoint để inference/resume; chưa có notebook đã execute để đối chiếu code. Hai link Kaggle do người dùng cung cấp, chưa xác minh trực tiếp với ZIP local.
 
-Chi tiết kiểm chứng: `results/nn/cuong_bias_comparison/`. Hướng dẫn tái lập ở [README](README.md); URL phiên bản ở [SAVED_VERSIONS.json](SAVED_VERSIONS.json).
+Chi tiết kiểm chứng: `results/nn/cuong_bias_comparison/`. Hướng dẫn tái lập ở [README](../../handoff/week3_cuong/README.md); URL phiên bản ở [SAVED_VERSIONS.json](../../handoff/week3_cuong/SAVED_VERSIONS.json).
 
 Cập nhật 20/11/2026.

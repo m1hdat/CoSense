@@ -1,6 +1,6 @@
 # Cương — scorer và thí nghiệm bias
 
-[Report](REPORT.md): B2 bias giảm RMSE nhưng không đạt điều kiện giữ vì Spearman head giảm quá 0,02. Đã thêm MAE vào scorer và đồng bộ các notebook baseline.
+[Report](../../reports/week3/Cuong.md): B2 bias giảm RMSE nhưng không đạt điều kiện giữ vì Spearman head giảm quá 0,02. Đã thêm MAE vào scorer và đồng bộ các notebook baseline.
 
 | File | Mục đích |
 |---|---|

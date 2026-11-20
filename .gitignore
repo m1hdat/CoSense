@@ -1,6 +1,9 @@
 # License/redistribution rights have not been verified.
 /data/
-/reports/
+/reports/*
+!/reports/week3/
+/reports/week3/*
+!/reports/week3/Cuong.md
 /results/
 /checkpoints/
 /.runtime/
