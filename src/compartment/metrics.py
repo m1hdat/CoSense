@@ -31,7 +31,7 @@ def evaluate(frame, task):
             errors=[abs((a[0]-b[0])-(a[1]-b[1])) for a,b in combinations(values,2)]
             pairs+=len(errors); deltas.append(float(np.mean(errors)))
         statistics.extend(target_stats)
-        results[output]=dict(spearman=correlation(y,p),rmse=float(np.sqrt(np.mean((y[valid]-p[valid])**2))) if valid.any() else None,
+        results[output]=dict(spearman=correlation(y,p),rmse=float(np.sqrt(np.mean((y[valid]-p[valid])**2))) if valid.any() else None, mae=float(np.mean(np.abs(y[valid]-p[valid]))) if valid.any() else None,
                              n_valid=int(valid.sum()),n_total=len(frame),
                              context_variance=correlation([s['gold_sd'] for s in target_stats],[s['pred_sd'] for s in target_stats]),
                              delta_mae_macro=float(np.mean(deltas)) if deltas else None,

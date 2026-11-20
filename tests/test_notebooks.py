@@ -22,3 +22,31 @@ def test_notebooks_run_without_local_source_or_generator():
                     assert not (node.module or '').startswith('compartment')
                 if isinstance(node, ast.Import):
                     assert all(not alias.name.startswith('compartment') for alias in node.names)
+
+
+SHARED = {
+    'data': ['occurrences', 'forms', 'align', 'load_records', 'audit', 'duplicates'],
+    'splits': ['make_splits', 'validate_splits', 'fingerprint'],
+    'metrics': ['correlation', 'evaluate', 'compare_predictions', 'error_groups'],
+    'artifacts': ['prediction_frame', 'export_bundle', 'read_bundle', 'write_submission', 'validate_submission'],
+}
+
+
+def functions(code):
+    return {node.name: ast.dump(node) for node in ast.parse(code).body
+            if isinstance(node, ast.FunctionDef)}
+
+
+def test_notebook_shared_code_matches_src():
+    expected = {}
+    for module, names in SHARED.items():
+        found = functions((ROOT / f'src/compartment/{module}.py').read_text(encoding='utf-8'))
+        expected.update({name: found[name] for name in names})
+    for path in sorted((ROOT / 'notebooks').glob('*.ipynb')):
+        notebook = json.loads(path.read_text(encoding='utf-8'))
+        actual = {}
+        for cell in notebook['cells']:
+            if cell['cell_type'] == 'code':
+                actual.update(functions(''.join(cell['source'])))
+        mismatches = [name for name in expected if actual.get(name) != expected[name]]
+        assert not mismatches, (path.name, mismatches)
