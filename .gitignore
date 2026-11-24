@@ -4,6 +4,9 @@
 !/reports/week3/
 /reports/week3/*
 !/reports/week3/Cuong.md
+!/reports/week4/
+/reports/week4/*
+!/reports/week4/Cuong.md
 /results/
 /checkpoints/
 /.runtime/

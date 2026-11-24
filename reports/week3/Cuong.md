@@ -43,10 +43,14 @@ Khởi tạo `head[1].bias` bằng trung bình nhãn train hữu hạn của t�
 - Bốn bundle ghi cùng môi trường: Python 3.13.16, torch 2.11.0+cu130, transformers 5.20.2, tokenizers 0.23.3, numpy 2.1.3, pandas 2.3.3, scipy 1.16.3; Tesla T4.
 - B2 fallback 68/2.479 train, 14/504 dev; không truncation theo metadata.
 
+**Đính chính giải thích ngày 23/11:** `nn.Linear` mặc định khởi tạo bias ngẫu nhiên gần 0, không phải đúng bằng 0 ([PyTorch 2.11](https://docs.pytorch.org/docs/2.11/generated/torch.nn.Linear.html)). Chẩn đoán affine không xác định nguyên nhân lỗi. Checkpoint các run này được chọn theo Spearman, không phải RMSE thấp nhất. Đính chính không thay số liệu hoặc kết luận giữ/bỏ tuần 3; đối chứng mới thuộc tuần 4.
+
 ## 4. Giới hạn và bàn giao
 
 Một seed trên dev: RMSE giảm chưa đi kèm thứ hạng tốt hơn. Giữ baseline cho so sánh chính. Chưa nạp checkpoint để inference/resume; chưa có notebook đã execute để đối chiếu code. Hai link Kaggle do người dùng cung cấp, chưa xác minh trực tiếp với ZIP local.
 
 Chi tiết kiểm chứng: `results/nn/cuong_bias_comparison/`. Hướng dẫn tái lập ở [README](../../handoff/week3_cuong/README.md); URL phiên bản ở [SAVED_VERSIONS.json](../../handoff/week3_cuong/SAVED_VERSIONS.json).
 
-Cập nhật 20/11/2026.
+Kết quả tuần 3 được giữ nguyên; phần rà soát và đối chứng chọn checkpoint được tổng hợp ở [report tuần 4](../week4/Cuong.md).
+
+Hoàn thiện báo cáo ngày 24/11/2026.

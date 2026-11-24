@@ -1,0 +1,29 @@
+{
+  "nn_B2_seed43": {
+    "task": "nn",
+    "model": "B2",
+    "seed": 43,
+    "url": "https://www.kaggle.com/code/azoncx/nn-b2-seed43/output?scriptVersionId=373190543",
+    "script_version_id": "373190543",
+    "source": "user-provided",
+    "remote_verification": "not verified: Kaggle pages inaccessible via browsing tool"
+  },
+  "nn_B2_seed44": {
+    "task": "nn",
+    "model": "B2",
+    "seed": 44,
+    "url": "https://www.kaggle.com/code/azoncx/nn-b2-seed44/notebook?scriptVersionId=373192597",
+    "script_version_id": "373192597",
+    "source": "user-provided",
+    "remote_verification": "not verified: Kaggle pages inaccessible via browsing tool"
+  },
+  "pv_B2_seed43": {
+    "task": "pv",
+    "model": "B2",
+    "seed": 43,
+    "url": "https://www.kaggle.com/code/azoncx/pv-b2-seed43/notebook?scriptVersionId=373194424",
+    "script_version_id": "373194424",
+    "source": "user-provided",
+    "remote_verification": "not verified: Kaggle pages inaccessible via browsing tool"
+  }
+}
