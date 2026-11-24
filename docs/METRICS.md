@@ -120,8 +120,17 @@ Kết luận được phép: **một seed trên dev, B2 xếp thứ tự tốt h
 ## 8. Những chi tiết cần ghi trong paper
 
 - Code tham chiếu: [metrics.py](../src/compartment/metrics.py). Trong JSON, `context_variance.value` tương ứng cột `variance_correlation`; `delta_mae_macro` tương ứng `delta_mae`.
-- MAE hiện tính từ predictions/absolute errors trong phân tích và error groups, không có field overall MAE riêng trong `evaluate()` JSON. Không nhầm MAE theo từng nhóm với MAE toàn tập.
+- `evaluate()` trả field `mae` cho từng output, tính trên cùng các cặp gold/pred hữu hạn như RMSE; trả `null` nếu không có cặp hợp lệ. Không nhầm MAE theo từng nhóm với MAE toàn tập. Bundle cũ có thể chưa có field này; muốn bổ sung cần tính lại từ predictions, không thay NA bằng 0.
 - Tính theo từng output, bỏ cặp gold/pred không hữu hạn và báo số mẫu hợp lệ; không âm thầm thay NA bằng 0. SD/delta bỏ expression chỉ có một context hợp lệ.
 - Overall MAE/RMSE/Spearman tính trên rows; delta MAE macro tính đều theo expression. Khi báo macro target MAE hay CI phải ghi rõ cách gộp, không coi chúng là cùng một chỉ số.
 - Mean ± SD qua training seeds đo độ dao động giữa lần train. Target-cluster bootstrap CI mô tả bất định khi lấy mẫu expression. Hai loại này không thay nhau.
 - Các metric context ở đây là thiết kế phân tích nội bộ; official scorer parity chưa xác nhận ngày 23/10/2026.
+
+Ví dụ đọc MAE và Spearman (frame có `target` và các cột gold/pred của NN):
+
+```python
+from compartment.metrics import evaluate
+metrics, stats = evaluate(frame, "nn")
+modifier = metrics["outputs"]["ModAvg"]
+print(modifier["mae"], modifier["spearman"]["value"])
+```
